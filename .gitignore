@@ -1,0 +1,12 @@
+node_modules/
+.expo/
+dist/
+build/
+android/
+ios/
+*.log
+.env
+google-services.json
+GoogleService-Info.plist
+supabase/.temp/
+.expo-export-check/

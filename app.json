@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "Urban Parking",
+    "slug": "urban-parking",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "urbanparking",
+    "icon": "./src/assets/app-icon.png",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.urbanparking.india",
+      "config": {
+        "googleMapsApiKey": "YOUR_IOS_GOOGLE_MAPS_KEY"
+      }
+    },
+    "android": {
+      "package": "com.urbanparking.india",
+      "googleServicesFile": "./google-services.json",
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "foregroundImage": "./src/assets/app-icon.png",
+        "backgroundColor": "#F7F4EF"
+      },
+      "config": {
+        "googleMaps": {
+          "apiKey": "YOUR_ANDROID_GOOGLE_MAPS_KEY"
+        }
+      },
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
+    },
+    "extra": {
+      "apiBaseUrl": "https://api.urbanparking.local/v1",
+      "appEnv": "development",
+      "eas": {
+        "projectId": "9ddaf460-e6da-427d-a07c-18e042df30cd"
+      }
+    },
+    "plugins": [
+      "expo-location",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F7F4EF",
+          "image": "./src/assets/logo-mark.png",
+          "imageWidth": 164
+        }
+      ],
+      "expo-font",
+      "expo-secure-store",
+      "expo-web-browser",
+      "@react-native-google-signin/google-signin"
+    ],
+    "owner": "rajaraman"
+  }
+}
