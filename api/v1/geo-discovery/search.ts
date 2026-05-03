@@ -156,7 +156,14 @@ const normalizeRequest = (body: unknown): Required<Omit<GeoDiscoveryRequest, "re
   const radiusKm = clamp(toNumber(payload.radiusKm) ?? DEFAULT_RADIUS_KM, MIN_RADIUS_KM, MAX_RADIUS_KM);
   const pageSize = Math.round(clamp(toNumber(payload.pageSize) ?? DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE));
   const sort = ALLOWED_SORTS.has(payload.sort as GeoSortKey) ? (payload.sort as GeoSortKey) : "distance";
-  const filters = typeof payload.filters === "object" && payload.filters !== null ? payload.filters : {};
+  const filters: Record<string, unknown> =
+    typeof payload.filters === "object" && payload.filters !== null
+      ? (payload.filters as Record<string, unknown>)
+      : {};
+  const cursors: Partial<Record<ServiceType, string>> =
+    typeof payload.cursors === "object" && payload.cursors !== null
+      ? (payload.cursors as Partial<Record<ServiceType, string>>)
+      : {};
   const geocell = roundedGeocell(latitude, longitude);
   const queryFingerprint =
     typeof payload.queryFingerprint === "string"
@@ -166,10 +173,7 @@ const normalizeRequest = (body: unknown): Required<Omit<GeoDiscoveryRequest, "re
         );
 
   return {
-    cursors:
-      typeof payload.cursors === "object" && payload.cursors !== null
-        ? (payload.cursors as Partial<Record<ServiceType, string>>)
-        : {},
+    cursors,
     filters,
     latitude,
     longitude,
