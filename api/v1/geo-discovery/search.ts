@@ -1,5 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 
+declare const process: {
+  env: Record<string, string | undefined>;
+};
+
 type ServiceType = "parking" | "rental" | "service";
 type AvailabilityStatus = "available" | "limited" | "unavailable" | "unknown";
 type GeoSortKey = "distance" | "price" | "rating";
@@ -256,17 +260,17 @@ const setCorsHeaders = (response: VercelResponseLike) => {
 };
 
 const supabase = () => {
-  const url = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = process.env.SUPABASE_URL ?? process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!url || !serviceRoleKey) {
+  if (!url || !serviceKey) {
     throw Object.assign(new Error("Missing Supabase server environment variables"), {
       code: "server_config_error",
       status: 500
     });
   }
 
-  return createClient(url, serviceRoleKey, {
+  return createClient(url, serviceKey, {
     auth: {
       persistSession: false
     }
