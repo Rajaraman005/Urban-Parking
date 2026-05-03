@@ -41,7 +41,7 @@
       ]
     },
     "extra": {
-      "apiBaseUrl": "https://your-domain.com/api/v1",
+      "apiBaseUrl": "https://flowaux.in/api/v1",
       "appEnv": "development",
       "eas": {
         "projectId": "9ddaf460-e6da-427d-a07c-18e042df30cd"

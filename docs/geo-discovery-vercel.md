@@ -5,7 +5,7 @@
 The mobile app expects this base URL:
 
 ```text
-EXPO_PUBLIC_API_BASE_URL=https://your-domain.com/api/v1
+EXPO_PUBLIC_API_BASE_URL=https://flowaux.in/api/v1
 ```
 
 The Vercel function is:
@@ -31,13 +31,13 @@ For a public mobile API, keep auth and abuse controls on the backend roadmap. Th
 Set this for production builds:
 
 ```text
-EXPO_PUBLIC_API_BASE_URL=https://your-domain.com/api/v1
+EXPO_PUBLIC_API_BASE_URL=https://flowaux.in/api/v1
 ```
 
-If your domain is `https://example.com`, the app will call:
+With the current domain, the app will call:
 
 ```text
-https://example.com/api/v1/geo-discovery/search
+https://flowaux.in/api/v1/geo-discovery/search
 ```
 
 ## Current Backend Coverage
