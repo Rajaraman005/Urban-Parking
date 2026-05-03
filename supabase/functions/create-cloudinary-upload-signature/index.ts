@@ -3,8 +3,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.105.1";
 
 import { corsHeaders, getBearerToken, jsonResponse, readJsonBody } from "../_shared/http.ts";
 
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-const MIN_IMAGE_DIMENSION = 1024;
 const allowedMimeTypes = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"]);
 
 const requiredEnv = (key: string) => {
@@ -96,18 +94,6 @@ Deno.serve(async (request) => {
       return invalid("Unsupported image type.");
     }
 
-    if (typeof body.fileSize === "number" && body.fileSize > MAX_IMAGE_BYTES) {
-      return invalid("Image is too large.");
-    }
-
-    if (
-      typeof body.width !== "number" ||
-      typeof body.height !== "number" ||
-      Math.max(body.width, body.height) < MIN_IMAGE_DIMENSION
-    ) {
-      return invalid("Image resolution is too low.");
-    }
-
     const { data: draft, error: draftError } = await admin
       .from("parking_spaces")
       .select("id, host_id, status")
@@ -133,7 +119,7 @@ Deno.serve(async (request) => {
       throw countError;
     }
 
-    if ((count ?? 0) >= 6) {
+    if ((count ?? 0) >= 5) {
       return invalid("Maximum photo count reached.");
     }
 

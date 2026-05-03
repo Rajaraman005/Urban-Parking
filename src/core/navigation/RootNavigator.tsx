@@ -1,7 +1,7 @@
-import { Ionicons } from "@expo/vector-icons";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
+import { BottomNavBar } from "@/components/navigation/BottomNavBar";
 import type { MainTabParamList, RootStackParamList } from "@/core/navigation/types";
 import { AuthScreen } from "@/features/auth/screens/AuthScreen";
 import { EmailOtpScreen } from "@/features/auth/screens/EmailOtpScreen";
@@ -12,44 +12,37 @@ import { BookingScreen } from "@/features/booking/screens/BookingScreen";
 import { HomeScreen } from "@/features/home/screens/HomeScreen";
 import { PrivacyPolicyScreen } from "@/features/legal/screens/PrivacyPolicyScreen";
 import { TermsOfUseScreen } from "@/features/legal/screens/TermsOfUseScreen";
-import { ListingScreen } from "@/features/listing/screens/ListingScreen";
 import { OnboardingScreen } from "@/features/onboarding/screens/OnboardingScreen";
+import { ProfileScreen } from "@/features/profile/screens/ProfileScreen";
+import { RentalScreen } from "@/features/rental/screens/RentalScreen";
+import { SearchScreen } from "@/features/search/screens/SearchScreen";
+import { ServicesScreen } from "@/features/services/screens/ServicesScreen";
 import { SplashScreen } from "@/features/splash/screens/SplashScreen";
+import { HostSpaceAddressScreen } from "@/features/userSetup/screens/HostSpaceAddressScreen";
 import { HostSpaceBasicsScreen } from "@/features/userSetup/screens/HostSpaceBasicsScreen";
 import { HostSpacePhotosScreen } from "@/features/userSetup/screens/HostSpacePhotosScreen";
 import { HostSpacePricingScreen } from "@/features/userSetup/screens/HostSpacePricingScreen";
 import { HostSpaceReviewScreen } from "@/features/userSetup/screens/HostSpaceReviewScreen";
 import { UserSetupIntentScreen } from "@/features/userSetup/screens/UserSetupIntentScreen";
 import { UserSetupProfileScreen } from "@/features/userSetup/screens/UserSetupProfileScreen";
-import { useAppTheme } from "@/theme/useAppTheme";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tabs = createBottomTabNavigator<MainTabParamList>();
 
 function MainTabs() {
-  const { colors } = useAppTheme();
-
   return (
     <Tabs.Navigator
-      screenOptions={({ route }) => ({
+      screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.text,
-        tabBarInactiveTintColor: colors.muted,
-        tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.border,
-          height: 72,
-          paddingBottom: 14,
-          paddingTop: 8
-        },
-        tabBarIcon: ({ color, size }) => {
-          const iconName = route.name === "Home" ? "map-outline" : "add-circle-outline";
-          return <Ionicons name={iconName} size={size} color={color} />;
-        }
-      })}
+        tabBarHideOnKeyboard: true
+      }}
+      tabBar={(props) => <BottomNavBar {...props} />}
     >
       <Tabs.Screen name="Home" component={HomeScreen} />
-      <Tabs.Screen name="Listing" component={ListingScreen} options={{ title: "List" }} />
+      <Tabs.Screen name="Rental" component={RentalScreen} />
+      <Tabs.Screen name="Search" component={SearchScreen} />
+      <Tabs.Screen name="Services" component={ServicesScreen} />
+      <Tabs.Screen name="Profile" component={ProfileScreen} />
     </Tabs.Navigator>
   );
 }
@@ -73,6 +66,7 @@ export function RootNavigator() {
       <Stack.Screen name="UserSetupIntent" component={UserSetupIntentScreen} />
       <Stack.Screen name="UserSetupProfile" component={UserSetupProfileScreen} />
       <Stack.Screen name="HostSpaceBasics" component={HostSpaceBasicsScreen} />
+      <Stack.Screen name="HostSpaceAddress" component={HostSpaceAddressScreen} />
       <Stack.Screen name="HostSpacePricing" component={HostSpacePricingScreen} />
       <Stack.Screen name="HostSpacePhotos" component={HostSpacePhotosScreen} />
       <Stack.Screen name="HostSpaceReview" component={HostSpaceReviewScreen} />

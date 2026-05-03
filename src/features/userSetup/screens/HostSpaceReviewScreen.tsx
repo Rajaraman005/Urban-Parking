@@ -74,7 +74,7 @@ export function HostSpaceReviewScreen({ navigation, route }: Props) {
     <SetupScaffold
       description="No space goes live instantly. We submit it for review so the marketplace stays safe and high quality."
       error={error}
-      primaryDisabled={!draft || photos.length === 0}
+      primaryDisabled={!draft || photos.length < 2}
       primaryLabel="Submit for review"
       primaryLoading={isSubmitting}
       progress={1}

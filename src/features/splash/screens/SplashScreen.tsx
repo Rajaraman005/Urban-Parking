@@ -1,4 +1,5 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 
@@ -41,6 +42,7 @@ export function SplashScreen({ navigation }: Props) {
 
   return (
     <View style={styles.screen}>
+      <StatusBar backgroundColor="#FFFFFF" style="dark" translucent={false} />
       <View style={styles.content}>
         <Image
           source={require("../../../assets/logo-mark.png")}

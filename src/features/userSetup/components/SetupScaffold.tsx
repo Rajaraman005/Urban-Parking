@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import type * as ImagePicker from "expo-image-picker";
+import { StatusBar } from "expo-status-bar";
 import type { PropsWithChildren } from "react";
 import {
   Platform,
@@ -21,6 +22,8 @@ interface SetupScaffoldProps extends PropsWithChildren {
   eyebrow?: string;
   description?: string;
   copyAlign?: "center" | "start";
+  contentPaddingBottom?: number;
+  contentPaddingTop?: number;
   progress?: number;
   primaryLabel?: string;
   primaryLoading?: boolean;
@@ -35,6 +38,7 @@ interface SetupScaffoldProps extends PropsWithChildren {
   isAvatarUploading?: boolean;
   onAvatarError?: (message: string) => void;
   onAvatarPicked?: (asset: ImagePicker.ImagePickerAsset) => void | Promise<void>;
+  showIntro?: boolean;
 }
 
 export function SetupScaffold({
@@ -45,6 +49,8 @@ export function SetupScaffold({
   avatarError,
   avatarPreviewUri,
   avatarUrl,
+  contentPaddingBottom,
+  contentPaddingTop,
   eyebrow = "Urban Parking",
   isAvatarUploading,
   onBack,
@@ -56,10 +62,12 @@ export function SetupScaffold({
   primaryLoading,
   progress,
   showAvatar = true,
+  showIntro = true,
   title,
 }: SetupScaffoldProps) {
   return (
     <SafeAreaView style={styles.screen}>
+      <StatusBar backgroundColor="#FFFFFF" style="dark" translucent={false} />
       <View style={styles.topContainer}>
         <View style={styles.header}>
           {onBack ? (
@@ -95,31 +103,38 @@ export function SetupScaffold({
       >
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[
+            styles.content,
+            primaryLabel ? styles.contentWithFooter : null,
+            typeof contentPaddingTop === "number" ? { paddingTop: contentPaddingTop } : null,
+            typeof contentPaddingBottom === "number" ? { paddingBottom: contentPaddingBottom } : null,
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Animated.View
-            entering={FadeInDown.delay(100).duration(500)}
-            style={[styles.copy, copyAlign === "start" ? styles.copyStart : null]}
-          >
-            {showAvatar ? (
-              <ProfileAvatar
-                avatarUrl={avatarUrl}
-                error={avatarError}
-                isUploading={isAvatarUploading}
-                previewUri={avatarPreviewUri}
-                onImagePicked={onAvatarPicked}
-                onPickError={onAvatarError}
-              />
-            ) : null}
-            <Text style={[styles.title, copyAlign === "start" ? styles.titleStart : null]}>{title}</Text>
-            {description ? (
-              <Text style={[styles.description, copyAlign === "start" ? styles.descriptionStart : null]}>
-                {description}
-              </Text>
-            ) : null}
-          </Animated.View>
+          {showIntro ? (
+            <Animated.View
+              entering={FadeInDown.delay(100).duration(500)}
+              style={[styles.copy, copyAlign === "start" ? styles.copyStart : null]}
+            >
+              {showAvatar ? (
+                <ProfileAvatar
+                  avatarUrl={avatarUrl}
+                  error={avatarError}
+                  isUploading={isAvatarUploading}
+                  previewUri={avatarPreviewUri}
+                  onImagePicked={onAvatarPicked}
+                  onPickError={onAvatarError}
+                />
+              ) : null}
+              <Text style={[styles.title, copyAlign === "start" ? styles.titleStart : null]}>{title}</Text>
+              {description ? (
+                <Text style={[styles.description, copyAlign === "start" ? styles.descriptionStart : null]}>
+                  {description}
+                </Text>
+              ) : null}
+            </Animated.View>
+          ) : null}
           <Animated.View entering={FadeInDown.delay(200).duration(500)} style={styles.body}>
             {children}
           </Animated.View>
@@ -201,6 +216,9 @@ const styles = StyleSheet.create({
     paddingTop: 40,
     paddingBottom: 28,
     gap: 26,
+  },
+  contentWithFooter: {
+    paddingBottom: 112,
   },
   copy: {
     gap: 16,

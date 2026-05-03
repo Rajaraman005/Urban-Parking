@@ -4,10 +4,11 @@ export const corsHeaders = {
   "Access-Control-Allow-Origin": "*"
 };
 
-export const jsonResponse = (body: Record<string, unknown>, status = 200) =>
+export const jsonResponse = (body: Record<string, unknown>, status = 200, headers?: Record<string, string>) =>
   new Response(JSON.stringify(body), {
     headers: {
       ...corsHeaders,
+      ...headers,
       "Content-Type": "application/json"
     },
     status

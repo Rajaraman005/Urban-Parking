@@ -6,6 +6,7 @@ import { corsHeaders, getBearerToken, jsonResponse, readJsonBody } from "../_sha
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 const MIN_AVATAR_DIMENSION = 256;
 const COMPLETION_RATE_LIMIT_PER_UPLOAD = 8;
+const FUNCTION_VERSION = "profile-avatar-complete-20260502-uuid-v2";
 const allowedFormats = new Set(["jpg", "jpeg", "png", "webp"]);
 
 const requiredEnv = (key: string) => {
@@ -31,7 +32,7 @@ const admin = createClient(supabaseUrl, serviceRoleKey, {
 
 const isUuid = (value: unknown) =>
   typeof value === "string" &&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value);
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
 const isPositiveSequence = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value > 0;
@@ -69,15 +70,17 @@ const enqueueCleanup = async (publicId: string, reason: string) => {
   }
 };
 
-const invalid = (message: string, code = "validation") => jsonResponse({ ok: false, code, message }, 400);
+const functionHeaders = { "x-function-version": FUNCTION_VERSION };
+const functionResponse = (body: Record<string, unknown>, status = 200) => jsonResponse(body, status, functionHeaders);
+const invalid = (message: string, code = "validation") => functionResponse({ ok: false, code, message }, 400);
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: { ...corsHeaders, ...functionHeaders } });
   }
 
   if (request.method !== "POST") {
-    return jsonResponse({ ok: false, code: "method_not_allowed", message: "Method not allowed." }, 405);
+    return functionResponse({ ok: false, code: "method_not_allowed", message: "Method not allowed." }, 405);
   }
 
   let cleanupPublicId: string | null = null;
@@ -87,13 +90,13 @@ Deno.serve(async (request) => {
     const token = getBearerToken(request);
 
     if (!token) {
-      return jsonResponse({ ok: false, code: "unauthorized", message: "Authentication is required." }, 401);
+      return functionResponse({ ok: false, code: "unauthorized", message: "Authentication is required." }, 401);
     }
 
     const { data: authData, error: authError } = await admin.auth.getUser(token);
 
     if (authError || !authData.user) {
-      return jsonResponse({ ok: false, code: "unauthorized", message: "Authentication is required." }, 401);
+      return functionResponse({ ok: false, code: "unauthorized", message: "Authentication is required." }, 401);
     }
 
     const body = await readJsonBody<{
@@ -148,7 +151,7 @@ Deno.serve(async (request) => {
     const expectedPublicId = `${profileAvatarFolder}/${userId}/${body.uploadId}`;
 
     if (body.publicId !== expectedPublicId) {
-      return jsonResponse({ ok: false, code: "forbidden", message: "Uploaded image does not belong to this user." }, 403);
+      return functionResponse({ ok: false, code: "forbidden", message: "Uploaded image does not belong to this user." }, 403);
     }
 
     const { data: upload, error: uploadError } = await admin
@@ -162,7 +165,7 @@ Deno.serve(async (request) => {
     }
 
     if (!upload || upload.user_id !== userId) {
-      return jsonResponse({ ok: false, code: "forbidden", message: "Upload session was not found." }, 403);
+      return functionResponse({ ok: false, code: "forbidden", message: "Upload session was not found." }, 403);
     }
 
     if (upload.status === "completed") {
@@ -173,13 +176,13 @@ Deno.serve(async (request) => {
       }
 
       console.info(JSON.stringify({ event: "profile_avatar_completion_retry" }));
-      return jsonResponse({ ok: true, data: { profile } });
+      return functionResponse({ ok: true, data: { profile } });
     }
 
     const attemptCount = Number(upload.completion_attempt_count ?? 0);
 
     if (attemptCount >= COMPLETION_RATE_LIMIT_PER_UPLOAD) {
-      return jsonResponse({ ok: false, code: "rate_limit", message: "Too many completion attempts. Try again shortly." }, 429);
+      return functionResponse({ ok: false, code: "rate_limit", message: "Too many completion attempts. Try again shortly." }, 429);
     }
 
     await admin
@@ -194,7 +197,7 @@ Deno.serve(async (request) => {
         .eq("upload_id", body.uploadId);
       await enqueueCleanup(body.publicId, "expired_avatar_upload");
 
-      return jsonResponse({ ok: false, code: "signature_expired", message: "Upload session expired." }, 410);
+      return functionResponse({ ok: false, code: "signature_expired", message: "Upload session expired." }, 410);
     }
 
     const { data: latestUpload, error: latestError } = await admin
@@ -217,7 +220,7 @@ Deno.serve(async (request) => {
       await enqueueCleanup(body.publicId, "stale_avatar_upload");
 
       console.warn(JSON.stringify({ event: "profile_avatar_stale_completion_rejected" }));
-      return jsonResponse({ ok: false, code: "stale_avatar_upload", message: "A newer profile photo is already active." }, 409);
+      return functionResponse({ ok: false, code: "stale_avatar_upload", message: "A newer profile photo is already active." }, 409);
     }
 
     const { data: currentProfile, error: currentProfileError } = await admin
@@ -265,7 +268,7 @@ Deno.serve(async (request) => {
 
     console.info(JSON.stringify({ event: "profile_avatar_upload_completed" }));
 
-    return jsonResponse({ ok: true, data: { profile: updatedProfile } });
+    return functionResponse({ ok: true, data: { profile: updatedProfile } });
   } catch (error) {
     console.error(
       JSON.stringify({
@@ -278,6 +281,6 @@ Deno.serve(async (request) => {
       await enqueueCleanup(cleanupPublicId, "avatar_completion_failed");
     }
 
-    return jsonResponse({ ok: false, code: "server", message: "Profile photo could not be saved." }, 500);
+    return functionResponse({ ok: false, code: "server", message: "Profile photo could not be saved." }, 500);
   }
 });

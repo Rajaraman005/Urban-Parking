@@ -6,6 +6,7 @@ import type {
   ParkingSpaceStatus,
   ProfileAvatarUploadStatus,
   ParkingType,
+  AddressProvider,
   SetupStep,
   UserIntent,
   UserProfile,
@@ -20,6 +21,7 @@ export type {
   ParkingSpaceStatus,
   ProfileAvatarUploadStatus,
   ParkingType,
+  AddressProvider,
   SetupStep,
   UserIntent,
   VehicleFit
@@ -32,9 +34,7 @@ export interface UserSetupSnapshot {
 }
 
 export interface PricingAvailabilitySnapshot {
-  blockedDates: string[];
   draft: ParkingSpace;
-  rules: ParkingSpaceAvailabilityRule[];
 }
 
 export interface CloudinaryUploadSignature {
@@ -55,4 +55,21 @@ export interface CloudinaryUploadResult {
   public_id: string;
   secure_url: string;
   width?: number;
+}
+
+export interface NormalizedAddressResult {
+  city: string | null;
+  confidence: number;
+  formattedAddress: string;
+  latitude: number;
+  locality: string | null;
+  longitude: number;
+  placeId: string | null;
+  postalCode: string | null;
+  provider: AddressProvider;
+  raw?: unknown;
+}
+
+export interface AddressSearchResponse {
+  results: NormalizedAddressResult[];
 }

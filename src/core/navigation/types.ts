@@ -12,6 +12,7 @@ export type RootStackParamList = {
   UserSetupIntent: undefined;
   UserSetupProfile: { intent?: "park" | "host" } | undefined;
   HostSpaceBasics: { draftId?: string } | undefined;
+  HostSpaceAddress: { draftId: string };
   HostSpacePricing: { draftId: string };
   HostSpacePhotos: { draftId: string };
   HostSpaceReview: { draftId: string };
@@ -23,7 +24,10 @@ export type RootStackParamList = {
 
 export type MainTabParamList = {
   Home: undefined;
-  Listing: undefined;
+  Rental: undefined;
+  Search: undefined;
+  Services: undefined;
+  Profile: undefined;
 };
 
 export type RootScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<

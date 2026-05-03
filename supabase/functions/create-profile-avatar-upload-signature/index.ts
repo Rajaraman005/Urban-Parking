@@ -7,6 +7,7 @@ const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 const MIN_AVATAR_DIMENSION = 256;
 const SIGNATURE_TTL_SECONDS = 120;
 const SIGNATURE_RATE_LIMIT_PER_MINUTE = 8;
+const FUNCTION_VERSION = "profile-avatar-signature-20260502-uuid-v2";
 const allowedMimeTypes = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
 
 const requiredEnv = (key: string) => {
@@ -53,33 +54,35 @@ const signCloudinaryParams = async (params: Record<string, string | number>) => 
 
 const isUuid = (value: unknown) =>
   typeof value === "string" &&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(value);
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
 const isPositiveSequence = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 
-const invalid = (message: string) => jsonResponse({ ok: false, code: "validation", message }, 400);
+const functionHeaders = { "x-function-version": FUNCTION_VERSION };
+const functionResponse = (body: Record<string, unknown>, status = 200) => jsonResponse(body, status, functionHeaders);
+const invalid = (message: string) => functionResponse({ ok: false, code: "validation", message }, 400);
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: { ...corsHeaders, ...functionHeaders } });
   }
 
   if (request.method !== "POST") {
-    return jsonResponse({ ok: false, code: "method_not_allowed", message: "Method not allowed." }, 405);
+    return functionResponse({ ok: false, code: "method_not_allowed", message: "Method not allowed." }, 405);
   }
 
   try {
     const token = getBearerToken(request);
 
     if (!token) {
-      return jsonResponse({ ok: false, code: "unauthorized", message: "Authentication is required." }, 401);
+      return functionResponse({ ok: false, code: "unauthorized", message: "Authentication is required." }, 401);
     }
 
     const { data: authData, error: authError } = await admin.auth.getUser(token);
 
     if (authError || !authData.user) {
-      return jsonResponse({ ok: false, code: "unauthorized", message: "Authentication is required." }, 401);
+      return functionResponse({ ok: false, code: "unauthorized", message: "Authentication is required." }, 401);
     }
 
     const body = await readJsonBody<{
@@ -132,11 +135,11 @@ Deno.serve(async (request) => {
 
     if (existingUpload) {
       if (existingUpload.user_id !== userId) {
-        return jsonResponse({ ok: false, code: "forbidden", message: "Upload does not belong to this user." }, 403);
+        return functionResponse({ ok: false, code: "forbidden", message: "Upload does not belong to this user." }, 403);
       }
 
       if (new Date(existingUpload.expires_at).getTime() <= Date.now()) {
-        return jsonResponse({ ok: false, code: "signature_expired", message: "Upload session expired." }, 410);
+        return functionResponse({ ok: false, code: "signature_expired", message: "Upload session expired." }, 410);
       }
 
       const signature = await signCloudinaryParams({
@@ -146,7 +149,7 @@ Deno.serve(async (request) => {
 
       console.info(JSON.stringify({ event: "profile_avatar_signature_requested", reused: true }));
 
-      return jsonResponse({
+      return functionResponse({
         ok: true,
         data: {
           apiKey: cloudinaryApiKey,
@@ -173,7 +176,7 @@ Deno.serve(async (request) => {
     }
 
     if ((count ?? 0) >= SIGNATURE_RATE_LIMIT_PER_MINUTE) {
-      return jsonResponse({ ok: false, code: "rate_limit", message: "Too many profile photo attempts. Try again shortly." }, 429);
+      return functionResponse({ ok: false, code: "rate_limit", message: "Too many profile photo attempts. Try again shortly." }, 429);
     }
 
     const timestamp = Math.floor(Date.now() / 1000);
@@ -200,7 +203,7 @@ Deno.serve(async (request) => {
 
     console.info(JSON.stringify({ event: "profile_avatar_signature_requested", reused: false }));
 
-    return jsonResponse({
+    return functionResponse({
       ok: true,
       data: {
         apiKey: cloudinaryApiKey,
@@ -221,6 +224,6 @@ Deno.serve(async (request) => {
       })
     );
 
-    return jsonResponse({ ok: false, code: "server", message: "Profile photo upload is temporarily unavailable." }, 500);
+    return functionResponse({ ok: false, code: "server", message: "Profile photo upload is temporarily unavailable." }, 500);
   }
 });

@@ -1,5 +1,6 @@
 import { NavigationContainer, DefaultTheme, DarkTheme } from "@react-navigation/native";
 import * as SplashScreen from "expo-splash-screen";
+import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, type PropsWithChildren } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -52,6 +53,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardProvider>
         <SafeAreaProvider>
+          <StatusBar backgroundColor={theme.colors.background} style={theme.isDark ? "light" : "dark"} translucent={false} />
           <NavigationContainer linking={linking} theme={navigationTheme}>
             {children}
           </NavigationContainer>

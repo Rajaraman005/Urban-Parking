@@ -40,7 +40,7 @@ export function OnboardingScreen({ navigation }: Props) {
 
   return (
     <View style={{ flex: 1, backgroundColor: "#050505" }}>
-      <StatusBar style="light" />
+      <StatusBar backgroundColor="transparent" style="light" translucent />
       <HeroCarousel
         bottomOffset={28}
         height={heroHeight}

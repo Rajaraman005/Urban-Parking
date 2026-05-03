@@ -1,20 +1,28 @@
 import * as Location from "expo-location";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { geoDiscoveryConfig } from "@/config/geoDiscovery";
 import { CHENNAI_CENTER } from "@/constants/mockParking";
+import { useGeoDiscovery } from "@/hooks/useGeoDiscovery";
 import type { GeoPoint, ParkingSpot } from "@/models/parking";
 import { parkingApi } from "@/services/api/parkingApi";
 import { toApiError } from "@/services/api/apiClient";
 import { useParkingStore } from "@/store/parkingStore";
 
-export function useNearbyParking() {
+const radiusKm = geoDiscoveryConfig.radius.defaultKm;
+
+const useLegacyNearbyParking = (enabled: boolean) => {
   const [spots, setSpots] = useState<ParkingSpot[]>([]);
   const [center, setCenter] = useState<GeoPoint>(CHENNAI_CENTER);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
-  const setRecentSpots = useParkingStore((state) => state.setRecentSpots);
 
   const loadNearby = useCallback(async () => {
+    if (!enabled) {
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -31,15 +39,13 @@ export function useNearbyParking() {
       }
 
       setCenter(nextCenter);
-      const nearby = await parkingApi.searchNearby({ center: nextCenter, radiusKm: 15 });
-      setSpots(nearby);
-      setRecentSpots(nearby);
+      setSpots(await parkingApi.searchNearby({ center: nextCenter, radiusKm }));
     } catch (loadError) {
       setError(toApiError(loadError).message);
     } finally {
       setIsLoading(false);
     }
-  }, [setRecentSpots]);
+  }, [enabled]);
 
   useEffect(() => {
     void loadNearby();
@@ -47,12 +53,43 @@ export function useNearbyParking() {
 
   return useMemo(
     () => ({
-      spots,
       center,
-      isLoading,
       error,
-      refresh: loadNearby
+      isLoading,
+      refresh: loadNearby,
+      spots
     }),
-    [center, error, isLoading, loadNearby, spots]
+    [center, error, isLoading, loadNearby, spots],
+  );
+};
+
+export function useNearbyParking() {
+  const useEngine = geoDiscoveryConfig.featureFlags.geoDiscoveryEngineEnabled;
+  const setRecentSpots = useParkingStore((state) => state.setRecentSpots);
+  const geo = useGeoDiscovery<ParkingSpot>({
+    enabled: useEngine,
+    radiusKm,
+    serviceType: "parking"
+  });
+  const legacy = useLegacyNearbyParking(!useEngine);
+  const geoSpots = useMemo(() => geo.items.map((item) => item.entity), [geo.items]);
+  const spots = useEngine ? geoSpots : legacy.spots;
+
+  useEffect(() => {
+    setRecentSpots(spots);
+  }, [setRecentSpots, spots]);
+
+  return useMemo(
+    () =>
+      useEngine
+        ? {
+            center: geo.center ?? CHENNAI_CENTER,
+            error: geo.error,
+            isLoading: geo.isLoading,
+            refresh: geo.refresh,
+            spots
+          }
+        : legacy,
+    [geo.center, geo.error, geo.isLoading, geo.refresh, legacy, spots, useEngine],
   );
 }

@@ -6,6 +6,11 @@
     "orientation": "portrait",
     "scheme": "urbanparking",
     "icon": "./src/assets/app-icon.png",
+    "androidStatusBar": {
+      "backgroundColor": "#FFFFFF",
+      "barStyle": "dark-content",
+      "translucent": false
+    },
     "userInterfaceStyle": "automatic",
     "assetBundlePatterns": [
       "**/*"
@@ -36,7 +41,7 @@
       ]
     },
     "extra": {
-      "apiBaseUrl": "https://api.urbanparking.local/v1",
+      "apiBaseUrl": "https://your-domain.com/api/v1",
       "appEnv": "development",
       "eas": {
         "projectId": "9ddaf460-e6da-427d-a07c-18e042df30cd"

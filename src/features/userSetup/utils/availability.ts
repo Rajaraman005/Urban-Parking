@@ -70,6 +70,37 @@ export function formatDateKey(dateKey: string) {
   return `${day} ${monthLabels[month - 1]}`;
 }
 
+export function formatDateKeyLong(dateKey: string) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+
+  if (!year || !month || !day) {
+    return dateKey;
+  }
+
+  return `${day} ${monthLabels[month - 1]} ${year}`;
+}
+
+export function formatDateRangeLabel(startDateKey: string, endDateKey: string) {
+  if (!startDateKey || !endDateKey) {
+    return "Select start and end dates";
+  }
+
+  const [startYear, startMonth] = startDateKey.split("-").map(Number);
+  const [endYear, endMonth] = endDateKey.split("-").map(Number);
+  const start = formatDateKey(startDateKey);
+  const end = formatDateKey(endDateKey);
+
+  if (startYear === endYear && startMonth === endMonth) {
+    const endDay = endDateKey.split("-")[2] ?? "";
+    const normalizedEndMonth = endMonth ?? startMonth ?? 1;
+    const endMonthLabel = monthLabels[Math.max(0, normalizedEndMonth - 1)] ?? "";
+
+    return `${start} - ${endDay} ${endMonthLabel}`;
+  }
+
+  return `${start} - ${end}`;
+}
+
 export function formatAvailabilityRule(rule: AvailabilityRuleInput) {
   const weekday = weekDays.find((day) => day.value === rule.weekday)?.label ?? "Day";
 
@@ -110,6 +141,26 @@ export function formatAvailabilitySummary(rules: AvailabilityRuleInput[], blocke
     blockedDates.length > 0 ? ` Blocked: ${blockedDates.slice(0, 4).map(formatDateKey).join(", ")}${blockedDates.length > 4 ? "..." : ""}` : "";
 
   return `${ruleSummary}.${blockedSummary}`.trim();
+}
+
+export function formatBoundedAvailabilitySummary(
+  availableFromDate: string,
+  availableToDate: string,
+  dailyStartMinute: number,
+  dailyEndMinute: number,
+  skipWeekends = false
+) {
+  if (!availableFromDate || !availableToDate) {
+    return "";
+  }
+
+  const hoursSummary =
+    dailyStartMinute === 0 && dailyEndMinute === 24 * 60
+      ? "All day"
+      : `${formatMinutesAsTime(dailyStartMinute)} - ${formatMinutesAsTime(dailyEndMinute)}`;
+  const weekendSuffix = skipWeekends ? ", Weekdays only" : "";
+
+  return `${formatDateRangeLabel(availableFromDate, availableToDate)}, ${hoursSummary}${weekendSuffix}`;
 }
 
 function formatWeekdayRange(weekdays: number[]) {

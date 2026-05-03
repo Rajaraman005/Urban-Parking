@@ -5,24 +5,30 @@ import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import { env } from "@/config/env";
 import { AppAuthError } from "@/features/auth/services/authErrors";
 import { authService } from "@/features/auth/services/authService";
-import type { HostBasicsValues, HostPricingValues, ProfileSetupValues } from "@/features/userSetup/schemas/userSetupSchemas";
+import type {
+  HostBasicsValues,
+  HostLocationValues,
+  HostPricingValues,
+  ProfileSetupValues
+} from "@/features/userSetup/schemas/userSetupSchemas";
 import type {
   CloudinaryUploadResult,
   CloudinaryUploadSignature,
+  AddressSearchResponse,
+  NormalizedAddressResult,
   ParkingSpace,
   ParkingSpacePhoto,
   PricingAvailabilitySnapshot,
   UserIntent,
   UserSetupSnapshot
 } from "@/features/userSetup/types/userSetup.types";
-import { formatAvailabilitySummary } from "@/features/userSetup/utils/availability";
+import { formatBoundedAvailabilitySummary } from "@/features/userSetup/utils/availability";
 import { supabase } from "@/lib/supabase/client";
 import type { Database, UserProfile } from "@/lib/supabase/database.types";
 import { logger } from "@/utils/logger";
 
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-const MIN_IMAGE_DIMENSION = 1024;
-const MAX_PHOTOS = 6;
+const MAX_PHOTOS = 5;
+const MIN_PHOTOS = 2;
 const allowedMimeTypes = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"]);
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 const MIN_AVATAR_DIMENSION = 256;
@@ -35,6 +41,11 @@ type ParkingSpaceUpdate = Database["public"]["Tables"]["parking_spaces"]["Update
 const nowIso = () => new Date().toISOString();
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const legacyWeekdays = {
+  allDays: [0, 1, 2, 3, 4, 5, 6],
+  weekdaysOnly: [1, 2, 3, 4, 5]
+} as const;
+
 const assertCloudinaryConfigured = () => {
   if (!env.cloudinaryCloudName) {
     throw new AppAuthError("configuration", "Cloudinary is not configured for this build.");
@@ -43,12 +54,33 @@ const assertCloudinaryConfigured = () => {
 
 const requireSession = async () => authService.getCurrentSessionStrict();
 
+const assertAddressLookupResponse = async <T>(response: Response, fallbackMessage: string): Promise<T> =>
+  assertFunctionResponse<T>(response, fallbackMessage);
+
 const assertSingleRow = <T>(row: T | null, message: string) => {
   if (!row) {
     throw new AppAuthError("server", message, "stale_write");
   }
 
   return row;
+};
+
+const isMissingAvailabilityColumnError = (error: unknown) => {
+  const message =
+    typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
+      ? error.message
+      : "";
+  const code =
+    typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" ? error.code : "";
+
+  return (
+    code === "PGRST204" ||
+    message.includes("available_from_date") ||
+    message.includes("available_to_date") ||
+    message.includes("daily_start_minute") ||
+    message.includes("daily_end_minute") ||
+    message.includes("skip_weekends")
+  );
 };
 
 const inferMimeType = (asset: ImagePicker.ImagePickerAsset) => {
@@ -187,6 +219,31 @@ const updateDraftWithLock = async (
   return assertSingleRow(data, "This draft changed on another device. Reload and continue with the latest draft.");
 };
 
+const saveHostPricingLegacy = async (draft: ParkingSpace, values: HostPricingValues, availabilitySummary: string) => {
+  const { data, error } = await supabase.rpc("save_parking_space_pricing_and_availability", {
+    p_availability_summary: availabilitySummary,
+    p_blocked_dates: [],
+    p_expected_version: draft.version,
+    p_height_feet: values.heightFeet ?? null,
+    p_hourly_price: values.hourlyPrice,
+    p_length_feet: values.lengthFeet,
+    p_rules: (values.skipWeekends ? legacyWeekdays.weekdaysOnly : legacyWeekdays.allDays).map((weekday) => ({
+      end_minute: values.dailyEndMinute,
+      start_minute: values.dailyStartMinute,
+      weekday
+    })),
+    p_slots_count: values.slotsCount,
+    p_space_id: draft.id,
+    p_width_feet: values.widthFeet
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return assertSingleRow(data, "This draft changed on another device. Reload and continue with the latest draft.");
+};
+
 const loadPhotos = async (parkingSpaceId: string) => {
   const { data, error } = await supabase
     .from("parking_space_photos")
@@ -199,36 +256,6 @@ const loadPhotos = async (parkingSpaceId: string) => {
   }
 
   return data ?? [];
-};
-
-const loadAvailabilityRules = async (parkingSpaceId: string) => {
-  const { data, error } = await supabase
-    .from("parking_space_availability_rules")
-    .select("*")
-    .eq("parking_space_id", parkingSpaceId)
-    .order("weekday", { ascending: true })
-    .order("start_minute", { ascending: true });
-
-  if (error) {
-    throw error;
-  }
-
-  return data ?? [];
-};
-
-const loadBlockedDates = async (parkingSpaceId: string) => {
-  const { data, error } = await supabase
-    .from("parking_space_availability_exceptions")
-    .select("exception_date")
-    .eq("parking_space_id", parkingSpaceId)
-    .eq("is_available", false)
-    .order("exception_date", { ascending: true });
-
-  if (error) {
-    throw error;
-  }
-
-  return (data ?? []).map((item) => item.exception_date);
 };
 
 export const userSetupService = {
@@ -333,21 +360,25 @@ export const userSetupService = {
   },
 
   async loadPricingAvailabilitySnapshot(draftId: string): Promise<PricingAvailabilitySnapshot> {
-    const [draft, rules, blockedDates] = await Promise.all([
-      this.loadDraft(draftId),
-      loadAvailabilityRules(draftId),
-      loadBlockedDates(draftId)
-    ]);
+    const draft = await this.loadDraft(draftId);
 
-    return { blockedDates, draft, rules };
+    return { draft };
   },
 
   async saveHostBasics(draft: ParkingSpace, values: HostBasicsValues) {
     const updated = await updateDraftWithLock(draft.id, draft.version, {
+      access_instructions: values.accessInstructions?.trim() || null,
       address: values.address.trim(),
+      address_confidence: values.addressConfidence,
+      address_place_id: values.addressPlaceId,
+      address_provider: values.addressProvider,
+      address_raw_osm_json: values.addressRawOsmJson as Database["public"]["Tables"]["parking_spaces"]["Update"]["address_raw_osm_json"],
       city: values.city.trim(),
       landmark: values.landmark?.trim() || null,
+      latitude: values.latitude,
       locality: values.locality.trim(),
+      location_confirmed_at: values.locationConfirmedAt,
+      longitude: values.longitude,
       parking_type: values.parkingType,
       postal_code: values.postalCode.trim(),
       title: `${values.vehicleFit === "bike" ? "Bike" : values.vehicleFit === "car" ? "Car" : "Bike and car"} parking`,
@@ -359,30 +390,101 @@ export const userSetupService = {
     return updated;
   },
 
-  async saveHostPricing(draft: ParkingSpace, values: HostPricingValues) {
-    const availabilitySummary = formatAvailabilitySummary(values.availabilityRules, values.blockedDates);
-    const { data, error } = await supabase.rpc("save_parking_space_pricing_and_availability", {
-      p_availability_summary: availabilitySummary,
-      p_blocked_dates: values.blockedDates,
-      p_expected_version: draft.version,
-      p_height_feet: values.heightFeet ?? null,
-      p_hourly_price: values.hourlyPrice,
-      p_length_feet: values.lengthFeet,
-      p_rules: values.availabilityRules.map((rule) => ({
-        end_minute: rule.endMinute,
-        start_minute: rule.startMinute,
-        weekday: rule.weekday
-      })),
-      p_slots_count: values.slotsCount,
-      p_space_id: draft.id,
-      p_width_feet: values.widthFeet
+  async saveHostLocation(draft: ParkingSpace, values: HostLocationValues) {
+    return updateDraftWithLock(draft.id, draft.version, {
+      address: values.address?.trim() || null,
+      address_confidence: values.addressConfidence,
+      address_place_id: values.addressPlaceId,
+      address_provider: values.addressProvider,
+      address_raw_osm_json: values.addressRawOsmJson as Database["public"]["Tables"]["parking_spaces"]["Update"]["address_raw_osm_json"],
+      city: values.city?.trim() || null,
+      latitude: values.latitude,
+      locality: values.locality?.trim() || null,
+      location_confirmed_at: values.locationConfirmedAt,
+      longitude: values.longitude,
+      postal_code: values.postalCode?.trim() || null
+    });
+  },
+
+  async searchAddress(query: string) {
+    const session = await requireSession();
+    const response = await fetch(`${env.supabaseUrl}/functions/v1/search-address`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        apikey: env.supabaseAnonKey,
+        Authorization: `Bearer ${session.access_token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ query })
     });
 
-    if (error) {
-      throw error;
+    return assertAddressLookupResponse<AddressSearchResponse>(response, "Address search is temporarily unavailable.");
+  },
+
+  async reverseGeocodeAddress(latitude: number, longitude: number) {
+    const session = await requireSession();
+    const response = await fetch(`${env.supabaseUrl}/functions/v1/reverse-geocode-address`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        apikey: env.supabaseAnonKey,
+        Authorization: `Bearer ${session.access_token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ latitude, longitude })
+    });
+
+    return assertAddressLookupResponse<{ result: NormalizedAddressResult | null }>(
+      response,
+      "Map lookup is temporarily unavailable."
+    );
+  },
+
+  async saveHostPricing(draft: ParkingSpace, values: HostPricingValues) {
+    const availabilitySummary = formatBoundedAvailabilitySummary(
+      values.availableFromDate,
+      values.availableToDate,
+      values.dailyStartMinute,
+      values.dailyEndMinute,
+      values.skipWeekends
+    );
+    let updated: ParkingSpace;
+
+    try {
+      updated = await updateDraftWithLock(draft.id, draft.version, {
+        available_from_date: values.availableFromDate,
+        available_to_date: values.availableToDate,
+        availability_summary: availabilitySummary,
+        daily_end_minute: values.dailyEndMinute,
+        daily_start_minute: values.dailyStartMinute,
+        height_feet: values.heightFeet ?? null,
+        hourly_price: values.hourlyPrice,
+        length_feet: values.lengthFeet,
+        skip_weekends: values.skipWeekends,
+        slots_count: values.slotsCount,
+        width_feet: values.widthFeet
+      });
+      const [rulesDeleteResult, exceptionsDeleteResult] = await Promise.all([
+        supabase.from("parking_space_availability_rules").delete().eq("parking_space_id", draft.id),
+        supabase.from("parking_space_availability_exceptions").delete().eq("parking_space_id", draft.id)
+      ]);
+
+      if (rulesDeleteResult.error) {
+        throw rulesDeleteResult.error;
+      }
+
+      if (exceptionsDeleteResult.error) {
+        throw exceptionsDeleteResult.error;
+      }
+    } catch (error) {
+      if (!isMissingAvailabilityColumnError(error)) {
+        throw error;
+      }
+
+      updated = await saveHostPricingLegacy(draft, values, availabilitySummary);
     }
 
-    const updated = assertSingleRow(data, "This draft changed on another device. Reload and continue with the latest draft.");
     const profile = await authService.ensureProfile();
     await updateProfileWithLock(profile, { intent: "host", setup_step: "host_photos", setup_draft_id: draft.id });
 
@@ -391,7 +493,7 @@ export const userSetupService = {
 
   async validatePhotoAsset(asset: ImagePicker.ImagePickerAsset, existingPhotoCount: number) {
     if (existingPhotoCount >= MAX_PHOTOS) {
-      throw new AppAuthError("validation", "You can upload up to 6 photos.");
+      throw new AppAuthError("validation", "You can upload up to 5 photos.");
     }
 
     const mimeType = inferMimeType(asset);
@@ -400,13 +502,6 @@ export const userSetupService = {
       throw new AppAuthError("validation", "Upload a JPG, PNG, WebP, HEIC, or HEIF image.");
     }
 
-    if (asset.fileSize && asset.fileSize > MAX_IMAGE_BYTES) {
-      throw new AppAuthError("validation", "Each photo must be 10MB or smaller.");
-    }
-
-    if (Math.max(asset.width, asset.height) < MIN_IMAGE_DIMENSION) {
-      throw new AppAuthError("validation", "Upload a sharper photo. Minimum size is 1024px wide or tall.");
-    }
   },
 
   validateProfileAvatarAsset(asset: ImagePicker.ImagePickerAsset) {
@@ -575,12 +670,22 @@ export const userSetupService = {
       | { ok: false; message?: string; code?: string }
       | null;
 
-    if (!response.ok || !payload) {
+    if (!payload) {
       throw new AppAuthError("server", "Photo upload could not be prepared.");
     }
 
     if (!payload.ok) {
-      throw new AppAuthError("server", payload.message ?? "Photo upload could not be prepared.", payload.code);
+      const category =
+        response.status === 401 || response.status === 403
+          ? "auth"
+          : response.status === 400
+            ? "validation"
+            : "server";
+      throw new AppAuthError(category, payload.message ?? "Photo upload could not be prepared.", payload.code);
+    }
+
+    if (!response.ok) {
+      throw new AppAuthError("server", "Photo upload could not be prepared.");
     }
 
     return payload.data;
@@ -651,8 +756,8 @@ export const userSetupService = {
   async markPhotosStepComplete(draftId: string) {
     const photos = await loadPhotos(draftId);
 
-    if (photos.length === 0) {
-      throw new AppAuthError("validation", "Add at least one clear parking space photo.");
+    if (photos.length < MIN_PHOTOS) {
+      throw new AppAuthError("validation", "Add at least 2 clear parking space photos.");
     }
 
     const profile = await authService.ensureProfile();
