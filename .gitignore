@@ -2,11 +2,32 @@ node_modules/
 .expo/
 dist/
 build/
-android/
-ios/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
 *.log
 .env
 google-services.json
 GoogleService-Info.plist
 supabase/.temp/
 .expo-export-check/
+
+# Flutter/Android generated artifacts.
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/app/.cxx/
+android/local.properties
+android/**/*.react-native.bak
+android/app/src_react_native_backup/
+
+# Xcode generated artifacts.
+ios/Flutter/ephemeral/
+ios/Pods/
+ios/.symlinks/
+ios/Runner.xcworkspace/xcuserdata/
+ios/Runner.xcodeproj/xcuserdata/
+ios/Runner.xcodeproj/project.xcworkspace/xcuserdata/
+ios/Flutter/Flutter.podspec

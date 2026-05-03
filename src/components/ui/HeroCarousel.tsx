@@ -51,8 +51,8 @@ export interface HeroCarouselProps {
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 const SIDE_PADDING = 20;
-const CARD_GAP = 0;
-const CARD_BORDER_RADIUS = 0;
+const CARD_GAP = 12;
+const CARD_BORDER_RADIUS = 12;
 const CARD_HEIGHT = 198;
 const PARALLAX_SHIFT = 24;
 const AUTOPLAY_RESUME_DELAY = 3500;
@@ -71,7 +71,7 @@ export function HeroCarousel({
   const { width: screenWidth } = useWindowDimensions();
   const { colors } = useAppTheme();
 
-  const cardWidth = Math.max(0, Math.round(screenWidth));
+  const cardWidth = Math.max(0, Math.round(screenWidth - SIDE_PADDING * 2));
   const snapInterval = cardWidth + CARD_GAP;
 
   const scrollX = useSharedValue(0);
@@ -176,8 +176,8 @@ export function HeroCarousel({
         onScroll={scrollHandler}
         onMomentumScrollEnd={handleMomentumEnd}
         contentContainerStyle={{
-          paddingLeft: 0,
-          paddingRight: 0,
+          paddingLeft: SIDE_PADDING,
+          paddingRight: SIDE_PADDING,
         }}
         ItemSeparatorComponent={() => <View style={{ width: CARD_GAP }} />}
         renderItem={({ item, index }) => (
@@ -381,7 +381,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 999,
+    borderRadius: 8,
     backgroundColor: "#FFFFFF",
   },
   tagPillText: {

@@ -2,14 +2,19 @@
   "name": "urban-parking",
   "version": "1.0.0",
   "private": true,
-  "main": "node_modules/expo/AppEntry.js",
   "scripts": {
-    "start": "expo start",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
-    "web": "expo start --web",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint . --ext .ts,.tsx"
+    "start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/flutter_with_env.ps1 run",
+    "android": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/flutter_with_env.ps1 run --device-id android",
+    "ios": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/flutter_with_env.ps1 run --device-id ios",
+    "doctor": "flutter doctor -v",
+    "pub:get": "flutter pub get",
+    "format": "dart format lib test docs",
+    "format:check": "dart format --set-exit-if-changed lib test",
+    "analyze": "flutter analyze --no-pub",
+    "test": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/flutter_with_env.ps1 test --no-pub",
+    "build:android": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/flutter_with_env.ps1 build apk --debug --no-pub",
+    "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/flutter_full_check.ps1",
+    "verify:quick": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/flutter_full_check.ps1 -SkipBuild"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
