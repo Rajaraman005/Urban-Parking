@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../features/auth/presentation/auth_screen.dart';
 import '../features/auth/presentation/password_reset_screen.dart';
 import '../features/booking/presentation/booking_screen.dart';
+import '../features/booking/presentation/booking_schedule_screen.dart';
 import '../features/home/presentation/home_screen.dart';
 import '../features/legal/data/legal_documents.dart';
 import '../features/legal/presentation/legal_document_screen.dart';
@@ -94,6 +95,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/booking/:spotId',
         builder: (context, state) =>
             BookingScreen(spotId: state.pathParameters['spotId']!),
+      ),
+      GoRoute(
+        path: '/booking/:spotId/schedule',
+        builder: (context, state) =>
+            BookingScheduleScreen(spotId: state.pathParameters['spotId']!),
       ),
       GoRoute(
         path: '/privacy',

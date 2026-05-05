@@ -41,6 +41,12 @@ class LocationService {
     }
 
     final startedAt = DateTime.now();
+    Position? lastKnown;
+    try {
+      lastKnown = await Geolocator.getLastKnownPosition();
+    } catch (_) {
+      lastKnown = null;
+    }
     try {
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
@@ -64,7 +70,6 @@ class LocationService {
         isFallback: false,
       );
     } catch (_) {
-      final lastKnown = await Geolocator.getLastKnownPosition();
       if (lastKnown != null) {
         return LocationResult(
           location: GeoPoint(
@@ -77,10 +82,11 @@ class LocationService {
         );
       }
       return LocationResult(
-        location: AppConfig.isProduction ? null : AppConstants.chennaiCenter,
+        location: AppConstants.chennaiCenter,
         permissionDenied: false,
-        isFallback: !AppConfig.isProduction,
-        error: 'GPS location timed out.',
+        isFallback: true,
+        error:
+            'GPS location timed out. Showing central Chennai while location warms up.',
       );
     }
   }

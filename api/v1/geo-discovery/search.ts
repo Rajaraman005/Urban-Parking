@@ -40,19 +40,27 @@ interface GeoDiscoveryRequest extends GeoPoint {
 
 interface ParkingSpaceRow {
   address: string | null;
+  available_from_date: string | null;
+  available_to_date: string | null;
   availability_summary: string | null;
+  daily_end_minute: number | null;
+  daily_start_minute: number | null;
   hourly_price: number | null;
   id: string;
   latitude: number | null;
   locality: string | null;
   longitude: number | null;
+  parking_type: string | null;
   slots_count: number;
   title: string | null;
+  vehicle_fit: string | null;
 }
 
 interface ParkingPhotoRow {
   parking_space_id: string;
-  secure_url: string;
+  secure_url: string | null;
+  sort_order: number | null;
+  upload_status: string | null;
 }
 
 interface GeoDiscoveryEntity {
@@ -88,6 +96,7 @@ const MAX_PAGE_SIZE = 50;
 const ALLOWED_SERVICE_TYPES = new Set<ServiceType>(["parking", "rental", "service"]);
 const ALLOWED_SORTS = new Set<GeoSortKey>(["distance", "price", "rating"]);
 const EARTH_RADIUS_KM = 6371.0088;
+const FALLBACK_IMAGE_URL = "https://images.unsplash.com/photo-1506521781263-d8422e82f27a";
 
 const corsOrigin = process.env.GEO_DISCOVERY_ALLOWED_ORIGIN ?? "*";
 
@@ -233,6 +242,55 @@ const activeAvailability = (slotsCount: number): AvailabilityStatus => {
   return slotsCount <= 2 ? "limited" : "available";
 };
 
+const datePart = (value: string | null, fallbackOffsetDays: number) => {
+  if (value) return value;
+  const date = new Date();
+  date.setDate(date.getDate() + fallbackOffsetDays);
+  return date.toISOString().slice(0, 10);
+};
+
+const isoAtMinute = (date: string, minute: number | null, fallbackMinute: number) => {
+  const safeMinute = typeof minute === "number" && Number.isInteger(minute) ? minute : fallbackMinute;
+  const hours = Math.floor(safeMinute / 60)
+    .toString()
+    .padStart(2, "0");
+  const minutes = (safeMinute % 60).toString().padStart(2, "0");
+  return `${date}T${hours}:${minutes}:00.000+05:30`;
+};
+
+const amenitiesFor = (row: ParkingSpaceRow) => {
+  const amenities = new Set<string>();
+
+  if (row.parking_type === "covered" || row.parking_type === "garage" || row.parking_type === "basement") {
+    amenities.add("covered");
+  }
+  if (row.vehicle_fit === "bike") {
+    amenities.add("twoWheeler");
+  }
+
+  if (amenities.size === 0) {
+    amenities.add("covered");
+  }
+
+  return [...amenities];
+};
+
+const photoUrlsFor = (photos: ParkingPhotoRow[] | undefined) => {
+  const urls = new Set<string>();
+
+  for (const photo of [...(photos ?? [])].sort((left, right) => {
+    const leftOrder = typeof left.sort_order === "number" ? left.sort_order : Number.MAX_SAFE_INTEGER;
+    const rightOrder = typeof right.sort_order === "number" ? right.sort_order : Number.MAX_SAFE_INTEGER;
+    return leftOrder - rightOrder;
+  })) {
+    if (photo.upload_status && photo.upload_status !== "linked") continue;
+    const url = photo.secure_url?.trim();
+    if (url) urls.add(url);
+  }
+
+  return [...urls];
+};
+
 const responseError = (response: VercelResponseLike, error: unknown) => {
   const status =
     typeof error === "object" && error !== null && "status" in error && typeof error.status === "number"
@@ -285,7 +343,7 @@ const loadParking = async (query: ReturnType<typeof normalizeRequest>): Promise<
   const { data: parkingRows, error } = await client
     .from("parking_spaces")
     .select(
-      "id,title,address,locality,latitude,longitude,slots_count,hourly_price,availability_summary,parking_space_photos(parking_space_id,secure_url)",
+      "id,title,address,locality,latitude,longitude,slots_count,hourly_price,availability_summary,parking_type,vehicle_fit,available_from_date,available_to_date,daily_start_minute,daily_end_minute,parking_space_photos(parking_space_id,secure_url,sort_order,upload_status)",
     )
     .eq("status", "active")
     .not("latitude", "is", null)
@@ -313,7 +371,10 @@ const loadParking = async (query: ReturnType<typeof normalizeRequest>): Promise<
         return [];
       }
 
-      const imageUrl = row.parking_space_photos?.[0]?.secure_url;
+      const imageUrls = photoUrlsFor(row.parking_space_photos);
+      const imageUrl = imageUrls[0] ?? FALLBACK_IMAGE_URL;
+      const startDate = datePart(row.available_from_date, 0);
+      const endDate = datePart(row.available_to_date, 1);
 
       return [
         {
@@ -322,10 +383,22 @@ const loadParking = async (query: ReturnType<typeof normalizeRequest>): Promise<
           distanceKm: itemDistanceKm,
           entity: {
             address: row.address,
+            amenities: amenitiesFor(row),
             availabilitySummary: row.availability_summary,
+            availableFrom: isoAtMinute(startDate, row.daily_start_minute, 8 * 60),
+            availableUntil: isoAtMinute(endDate, row.daily_end_minute, 20 * 60),
+            cadence: "hourly",
+            currency: "INR",
+            distanceKm: itemDistanceKm,
             hourlyPrice: row.hourly_price,
             id: row.id,
+            imageUrl,
+            imageUrls: imageUrls.length > 0 ? imageUrls : [imageUrl],
             locality: row.locality,
+            location,
+            price: row.hourly_price,
+            rating: 0,
+            reviewCount: 0,
             slotsAvailable: row.slots_count,
             title: row.title
           },

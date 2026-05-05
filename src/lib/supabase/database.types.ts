@@ -352,6 +352,12 @@ export type Database = {
         };
         Returns: UserProfile;
       };
+      get_public_parking_spot: {
+        Args: {
+          p_space_id: string;
+        };
+        Returns: Json;
+      };
       submit_parking_space_for_review: {
         Args: {
           p_space_id: string;

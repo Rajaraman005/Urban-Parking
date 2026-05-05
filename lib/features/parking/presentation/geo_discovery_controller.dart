@@ -88,6 +88,11 @@ class GeoDiscoveryController extends AsyncNotifier<GeoDiscoveryViewState> {
           ),
           cancelToken: _cancelToken,
         );
+    ref
+        .read(parkingSpotCacheProvider)
+        .upsertDiscoveryItems(
+          result.results.values.expand((page) => page.items),
+        );
     telemetry.event(TelemetryEvent.geoResultsRendered, {
       'emptyResult': result.results.values.every((page) => page.items.isEmpty),
       'queryFingerprint': result.queryFingerprint,

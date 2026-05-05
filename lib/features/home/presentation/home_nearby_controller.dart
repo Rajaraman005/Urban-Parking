@@ -87,18 +87,20 @@ class HomeNearbyController extends AsyncNotifier<HomeNearbyViewState> {
         if (distanceCompare != 0) return distanceCompare;
         return (right.rating ?? 0).compareTo(left.rating ?? 0);
       });
+    final visibleItems = items.take(6).toList(growable: false);
+    ref.read(parkingSpotCacheProvider).upsertDiscoveryItems(visibleItems);
 
     telemetry.event(TelemetryEvent.geoResultsRendered, {
-      'emptyResult': items.isEmpty,
+      'emptyResult': visibleItems.isEmpty,
       'queryFingerprint': result.queryFingerprint,
-      'renderCount': items.take(6).length,
+      'renderCount': visibleItems.length,
       'source': result.source.apiValue,
       'surface': 'home',
     });
 
     return HomeNearbyViewState(
       center: locationState.location,
-      items: items.take(6).toList(growable: false),
+      items: visibleItems,
       partialFailures: result.partialFailures,
       permissionDenied: locationState.permissionDenied,
       isFallbackLocation: locationState.isFallback,

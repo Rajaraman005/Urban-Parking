@@ -1,10 +1,12 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useEffect, useMemo, useState } from "react";
-import { Image, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 
 import type { RootStackParamList } from "@/core/navigation/types";
 import { Button } from "@/components/ui/Button";
 import { Loader } from "@/components/ui/Loader";
+import { RemoteImageCarousel } from "@/components/ui/RemoteImageCarousel";
+import { RemoteImageViewerModal } from "@/components/ui/RemoteImageViewerModal";
 import { Screen } from "@/components/ui/Screen";
 import type { BookingQuote, ParkingSpot } from "@/models/parking";
 import { parkingApi } from "@/services/api/parkingApi";
@@ -20,6 +22,8 @@ export function BookingScreen({ navigation, route }: Props) {
   const [quote, setQuote] = useState<BookingQuote | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isViewerVisible, setIsViewerVisible] = useState(false);
+  const [viewerInitialIndex, setViewerInitialIndex] = useState(0);
 
   const bookingWindow = useMemo(
     () => ({
@@ -68,34 +72,53 @@ export function BookingScreen({ navigation, route }: Props) {
     );
   }
 
+  const heroImageUrls =
+    spot.imageUrls.length > 0 ? spot.imageUrls : [spot.imageUrl];
+
   return (
-    <Screen>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 18, paddingBottom: 28 }}>
-        <Button label="Back" variant="ghost" onPress={() => navigation.goBack()} />
-        <Image source={{ uri: `${spot.imageUrl}?auto=format&fit=crop&w=1000&q=80` }} style={{ height: 220, borderRadius: 8 }} />
-        <View style={{ gap: 8 }}>
-          <Text style={{ color: colors.text, fontSize: 30, lineHeight: 36, fontWeight: "800" }}>{spot.title}</Text>
-          <Text style={{ color: colors.muted, fontSize: 15 }}>{spot.address}</Text>
-        </View>
-        <View style={{ flexDirection: "row", gap: 10 }}>
-          {spot.amenities.slice(0, 3).map((amenity) => (
-            <View key={amenity} style={{ borderRadius: 8, backgroundColor: colors.surface, paddingHorizontal: 12, paddingVertical: 10 }}>
-              <Text style={{ color: colors.text, fontSize: 13, fontWeight: "700" }}>{amenity}</Text>
-            </View>
-          ))}
-        </View>
-        <View style={{ borderRadius: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, padding: 16, gap: 14 }}>
-          <Text style={{ color: colors.text, fontSize: 18, fontWeight: "800" }}>Booking summary</Text>
-          <Text style={{ color: colors.muted }}>Today, 6:00 PM to 9:00 PM</Text>
-          <Row label={`${formatMoney(spot.price, spot.currency)} / ${cadenceLabel(spot.cadence)}`} value={formatMoney(quote.subtotal)} />
-          <Row label="Platform fee" value={formatMoney(quote.platformFee)} />
-          <Row label="GST" value={formatMoney(quote.taxes)} />
-          <View style={{ height: 1, backgroundColor: colors.border }} />
-          <Row label="Total" value={formatMoney(quote.total)} strong />
-        </View>
-        <Button label="Reserve slot" onPress={() => navigation.navigate("MainTabs", { screen: "Home" })} />
-      </ScrollView>
-    </Screen>
+    <>
+      <Screen>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 18, paddingBottom: 28 }}>
+          <Button label="Back" variant="ghost" onPress={() => navigation.goBack()} />
+          <RemoteImageCarousel
+            height={220}
+            imageUrls={heroImageUrls}
+            isAutoPlayEnabled={!isViewerVisible}
+            onImagePress={(index) => {
+              setViewerInitialIndex(index);
+              setIsViewerVisible(true);
+            }}
+          />
+          <View style={{ gap: 8 }}>
+            <Text style={{ color: colors.text, fontSize: 30, lineHeight: 36, fontWeight: "800" }}>{spot.title}</Text>
+            <Text style={{ color: colors.muted, fontSize: 15 }}>{spot.address}</Text>
+          </View>
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            {spot.amenities.slice(0, 3).map((amenity) => (
+              <View key={amenity} style={{ borderRadius: 8, backgroundColor: colors.surface, paddingHorizontal: 12, paddingVertical: 10 }}>
+                <Text style={{ color: colors.text, fontSize: 13, fontWeight: "700" }}>{amenity}</Text>
+              </View>
+            ))}
+          </View>
+          <View style={{ borderRadius: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, padding: 16, gap: 14 }}>
+            <Text style={{ color: colors.text, fontSize: 18, fontWeight: "800" }}>Booking summary</Text>
+            <Text style={{ color: colors.muted }}>Today, 6:00 PM to 9:00 PM</Text>
+            <Row label={`${formatMoney(spot.price, spot.currency)} / ${cadenceLabel(spot.cadence)}`} value={formatMoney(quote.subtotal)} />
+            <Row label="Platform fee" value={formatMoney(quote.platformFee)} />
+            <Row label="GST" value={formatMoney(quote.taxes)} />
+            <View style={{ height: 1, backgroundColor: colors.border }} />
+            <Row label="Total" value={formatMoney(quote.total)} strong />
+          </View>
+          <Button label="Reserve slot" onPress={() => navigation.navigate("MainTabs", { screen: "Home" })} />
+        </ScrollView>
+      </Screen>
+      <RemoteImageViewerModal
+        imageUrls={heroImageUrls}
+        initialIndex={viewerInitialIndex}
+        onClose={() => setIsViewerVisible(false)}
+        visible={isViewerVisible}
+      />
+    </>
   );
 }
 

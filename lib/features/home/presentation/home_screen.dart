@@ -19,7 +19,7 @@ typedef _HomeHeroSlide = ({
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
-  static const _statusBarColor = Color(0xFF82F126);
+  static const _statusBarColor = Colors.white;
   static const _systemUiStyle = SystemUiOverlayStyle(
     statusBarColor: _statusBarColor,
     statusBarIconBrightness: Brightness.dark,
@@ -989,42 +989,56 @@ class _HomeTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 58,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Row(
-          children: [
-            Expanded(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      'Urban Parking',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: const Color(0xFF0B0B0C),
-                        fontWeight: FontWeight.w900,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(color: Colors.black.withValues(alpha: 0.06)),
+        ),
+      ),
+      child: SizedBox(
+        height: 58,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            children: [
+              Expanded(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'Urban Parking',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: const Color(0xFF0B0B0C),
+                          fontWeight: FontWeight.w900,
+                          height: 1,
+                          letterSpacing: 0,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  const Icon(
-                    Icons.favorite,
-                    color: Color(0xFFE11D48),
-                    size: 19,
-                  ),
-                ],
+                    const SizedBox(width: 6),
+                    const Icon(
+                      Icons.favorite,
+                      color: Color(0xFFE11D48),
+                      size: 19,
+                    ),
+                  ],
+                ),
               ),
-            ),
-            IconButton(
-              tooltip: 'Notifications',
-              onPressed: () {},
-              icon: const Icon(Icons.notifications_none_rounded),
-            ),
-          ],
+              IconButton(
+                tooltip: 'Notifications',
+                onPressed: () {},
+                icon: const Icon(
+                  Icons.notifications_none_rounded,
+                  color: Color(0xFF0B0B0C),
+                  size: 24,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

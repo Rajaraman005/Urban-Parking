@@ -7,6 +7,24 @@ import '../../../shared/formatters.dart';
 import '../../../shared/widgets/product_card.dart';
 import 'home_nearby_controller.dart';
 
+final _homeNearbyFavoriteIdsProvider =
+    NotifierProvider<_HomeNearbyFavoriteIdsController, Set<String>>(
+      _HomeNearbyFavoriteIdsController.new,
+    );
+
+class _HomeNearbyFavoriteIdsController extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  void toggle(String id) {
+    final next = {...state};
+    if (!next.add(id)) {
+      next.remove(id);
+    }
+    state = next;
+  }
+}
+
 class HomeNearbySection extends ConsumerWidget {
   const HomeNearbySection({super.key});
 
@@ -133,13 +151,15 @@ class _HomeNearbyHeader extends StatelessWidget {
   }
 }
 
-class _HomeNearbyResults extends StatelessWidget {
+class _HomeNearbyResults extends ConsumerWidget {
   const _HomeNearbyResults({required this.state});
 
   final HomeNearbyViewState state;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final favoriteIds = ref.watch(_homeNearbyFavoriteIdsProvider);
+
     return Column(
       children: [
         if (state.isStale ||
@@ -157,18 +177,22 @@ class _HomeNearbyResults extends StatelessWidget {
           itemBuilder: (context, index) {
             final item = state.items[index];
             final route = _routeFor(item);
+            final isFavorite = favoriteIds.contains(item.id);
             return ProductCard(
               imageUrl: _imageUrlFor(item),
               title: item.title,
               subtitle: _subtitleFor(item),
-              badge: _badgeFor(item),
               priceText: item.price == null
                   ? null
                   : formatHourlyMoney(item.price!, item.currency ?? 'INR'),
               stats: _statsFor(item),
-              imageHeight: 142,
+              statsEvenlySpaced: true,
+              favoriteSelected: isFavorite,
+              imageHeight: 162,
               onTap: route == null ? null : () => context.push(route),
-              onOpenPressed: route == null ? null : () => context.push(route),
+              onFavoritePressed: () => ref
+                  .read(_homeNearbyFavoriteIdsProvider.notifier)
+                  .toggle(item.id),
             );
           },
         ),
@@ -207,28 +231,6 @@ class _HomeNearbyResults extends StatelessWidget {
     return '${item.distanceKm.toStringAsFixed(1)} km nearby';
   }
 
-  String _badgeFor(GeoDiscoveryEntity<Map<String, Object?>> item) {
-    final typeLabel = switch (item.serviceType) {
-      ServiceType.parking => 'Parking',
-      ServiceType.rental => 'Rental',
-      ServiceType.service => 'Service',
-    };
-    return '$typeLabel • ${_availabilityLabel(item.availabilityStatus)}';
-  }
-
-  String _availabilityLabel(AvailabilityStatus status) {
-    switch (status) {
-      case AvailabilityStatus.available:
-        return 'Available';
-      case AvailabilityStatus.limited:
-        return 'Limited';
-      case AvailabilityStatus.unavailable:
-        return 'Unavailable';
-      case AvailabilityStatus.unknown:
-        return 'Nearby';
-    }
-  }
-
   List<ProductCardStat> _statsFor(
     GeoDiscoveryEntity<Map<String, Object?>> item,
   ) {
@@ -239,15 +241,6 @@ class _HomeNearbyResults extends StatelessWidget {
         label: '${item.distanceKm.toStringAsFixed(1)} km',
       ),
     ];
-
-    if (item.rating != null && item.rating! > 0) {
-      stats.add(
-        ProductCardStat(
-          icon: Icons.star_rounded,
-          label: item.rating!.toStringAsFixed(1),
-        ),
-      );
-    }
 
     if (slotsAvailable != null && slotsAvailable > 0) {
       stats.add(
@@ -441,35 +434,54 @@ class _HomeNearbySkeletonCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.white,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 26,
+            offset: const Offset(0, 16),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
+      child: Material(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: Colors.black.withValues(alpha: 0.07)),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: const ColoredBox(
-                color: Color(0xFFE4E4E7),
-                child: SizedBox(height: 132, width: double.infinity),
-              ),
+            const ColoredBox(
+              color: Color(0xFFE4E4E7),
+              child: SizedBox(height: 162, width: double.infinity),
             ),
-            const SizedBox(height: 12),
-            const _SkeletonLine(widthFactor: 0.62, height: 16),
-            const SizedBox(height: 8),
-            const _SkeletonLine(widthFactor: 0.88, height: 12),
-            const SizedBox(height: 12),
-            Row(
-              children: const [
-                _SkeletonPill(width: 70),
-                SizedBox(width: 8),
-                _SkeletonPill(width: 64),
-                SizedBox(width: 8),
-                _SkeletonPill(width: 82),
-              ],
+            const Padding(
+              padding: EdgeInsets.fromLTRB(14, 13, 14, 15),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _SkeletonLine(widthFactor: 0.62, height: 18),
+                  SizedBox(height: 8),
+                  _SkeletonLine(widthFactor: 0.88, height: 13),
+                  SizedBox(height: 12),
+                  Row(
+                    children: [
+                      _SkeletonPill(width: 76),
+                      SizedBox(width: 8),
+                      _SkeletonPill(width: 72),
+                      SizedBox(width: 8),
+                      _SkeletonPill(width: 84),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ),

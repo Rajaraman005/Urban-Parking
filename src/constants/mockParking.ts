@@ -24,7 +24,11 @@ export const MOCK_PARKING_SPOTS: ParkingSpot[] = [
     slotsAvailable: 2,
     location: { latitude: 13.0604, longitude: 80.2496 },
     amenities: ["covered", "security", "cctv"],
-    imageUrl: "https://images.unsplash.com/photo-1506521781263-d8422e82f27a"
+    imageUrl: "https://images.unsplash.com/photo-1506521781263-d8422e82f27a",
+    imageUrls: [
+      "https://images.unsplash.com/photo-1506521781263-d8422e82f27a",
+      "https://images.unsplash.com/photo-1573348722427-f1d6819fdf98"
+    ]
   },
   {
     id: "adyar-courtyard-02",
@@ -42,7 +46,11 @@ export const MOCK_PARKING_SPOTS: ParkingSpot[] = [
     slotsAvailable: 4,
     location: { latitude: 13.0067, longitude: 80.2574 },
     amenities: ["covered", "evCharging", "security"],
-    imageUrl: "https://images.unsplash.com/photo-1573348722427-f1d6819fdf98"
+    imageUrl: "https://images.unsplash.com/photo-1573348722427-f1d6819fdf98",
+    imageUrls: [
+      "https://images.unsplash.com/photo-1573348722427-f1d6819fdf98",
+      "https://images.unsplash.com/photo-1590674899484-d5640e854abe"
+    ]
   },
   {
     id: "tnagar-covered-03",
@@ -60,7 +68,11 @@ export const MOCK_PARKING_SPOTS: ParkingSpot[] = [
     slotsAvailable: 1,
     location: { latitude: 13.0418, longitude: 80.2341 },
     amenities: ["covered", "cctv", "twoWheeler"],
-    imageUrl: "https://images.unsplash.com/photo-1590674899484-d5640e854abe"
+    imageUrl: "https://images.unsplash.com/photo-1590674899484-d5640e854abe",
+    imageUrls: [
+      "https://images.unsplash.com/photo-1590674899484-d5640e854abe",
+      "https://images.unsplash.com/photo-1604063165585-e17e9c3c3f0b"
+    ]
   },
   {
     id: "omr-techpark-04",
@@ -78,6 +90,10 @@ export const MOCK_PARKING_SPOTS: ParkingSpot[] = [
     slotsAvailable: 8,
     location: { latitude: 12.9396, longitude: 80.2376 },
     amenities: ["covered", "security", "evCharging", "cctv"],
-    imageUrl: "https://images.unsplash.com/photo-1604063165585-e17e9c3c3f0b"
+    imageUrl: "https://images.unsplash.com/photo-1604063165585-e17e9c3c3f0b",
+    imageUrls: [
+      "https://images.unsplash.com/photo-1604063165585-e17e9c3c3f0b",
+      "https://images.unsplash.com/photo-1506521781263-d8422e82f27a"
+    ]
   }
 ];

@@ -30,6 +30,7 @@ export interface ParkingSpot {
   location: GeoPoint;
   amenities: ParkingAmenity[];
   imageUrl: string;
+  imageUrls: string[];
 }
 
 export interface BookingQuote {

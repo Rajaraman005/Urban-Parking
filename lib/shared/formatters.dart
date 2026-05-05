@@ -5,7 +5,7 @@ import '../features/parking/domain/parking_spot.dart';
 String formatMoney(num amount, [String currency = 'INR']) {
   final format = NumberFormat.currency(
     locale: 'en_IN',
-    symbol: currency == 'INR' ? '₹' : '$currency ',
+    symbol: currency == 'INR' ? '\u20B9' : '$currency ',
     decimalDigits: 0,
   );
   return format.format(amount);

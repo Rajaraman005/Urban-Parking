@@ -1,150 +1,242 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../shared/formatters.dart';
 import '../../../shared/widgets/app_screen.dart';
-import '../../../shared/widgets/network_image_tile.dart';
+import '../../../shared/widgets/listing_context_section.dart';
+import '../../../shared/widgets/listing_details_page.dart';
 import '../../../shared/widgets/state_view.dart';
+import '../../../shared/widgets/urban_bottom_nav.dart';
+import '../../parking/domain/parking_spot.dart';
 import 'booking_controller.dart';
 
 class BookingScreen extends ConsumerWidget {
   const BookingScreen({required this.spotId, super.key});
 
   final String spotId;
+  static const _detailBottomNav = UrbanBottomNav(currentIndex: 0);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final booking = ref.watch(bookingControllerProvider(spotId));
+    final spot = ref.watch(bookingSpotProvider(spotId));
 
-    return AppScreen(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
-        ),
-        title: const Text('Booking'),
-      ),
-      child: booking.when(
-        loading: () => const StateView(
-          title: 'Preparing booking',
-          body: 'Loading space and quote details.',
+    return spot.when(
+      loading: () => const AppScreen(
+        bottomNavigationBar: _detailBottomNav,
+        child: StateView(
+          title: 'Loading property',
+          body: 'Preparing space details.',
           isLoading: true,
         ),
-        error: (error, _) => StateView(
-          title: 'Could not load booking',
+      ),
+      error: (error, _) => AppScreen(
+        bottomNavigationBar: _detailBottomNav,
+        child: StateView(
+          title: 'Could not load property',
           body: error.toString(),
           actionLabel: 'Back to search',
           onAction: () => context.go('/search'),
         ),
-        data: (state) {
-          final spot = state.spot;
-          final quote = state.quote;
-          final timeFormat = DateFormat('EEE, h:mm a');
-
-          return ListView(
-            padding: const EdgeInsets.only(bottom: 32),
-            children: [
-              NetworkImageTile(url: spot.imageUrl, height: 220),
-              const SizedBox(height: 18),
-              Text(
-                spot.title,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                spot.address,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 14),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final amenity in spot.amenities.take(4))
-                    Chip(label: Text(amenity.name)),
-                ],
-              ),
-              const SizedBox(height: 18),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Booking summary',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '${timeFormat.format(quote.startAt)} to ${timeFormat.format(quote.endAt)}',
-                      ),
-                      const SizedBox(height: 16),
-                      _Row(
-                        label:
-                            '${formatMoney(spot.price, spot.currency)} / ${cadenceLabel(spot.cadence)}',
-                        value: formatMoney(quote.subtotal, quote.currency),
-                      ),
-                      _Row(
-                        label: 'Platform fee',
-                        value: formatMoney(quote.platformFee, quote.currency),
-                      ),
-                      _Row(
-                        label: 'GST',
-                        value: formatMoney(quote.taxes, quote.currency),
-                      ),
-                      const Divider(height: 24),
-                      _Row(
-                        label: 'Total',
-                        value: formatMoney(quote.total, quote.currency),
-                        strong: true,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              FilledButton.icon(
-                onPressed: () => context.go('/home'),
-                icon: const Icon(Icons.check_circle_outline),
-                label: const Text('Reserve slot'),
-              ),
-            ],
-          );
-        },
+      ),
+      data: (spot) => _PropertyDetailsContent(
+        onBack: () => _close(context),
+        onBookNow: () => _openBookingSchedule(context, ref),
+        spot: spot,
       ),
     );
   }
+
+  void _close(BuildContext context) {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+    context.go('/home');
+  }
+
+  void _openBookingSchedule(BuildContext context, WidgetRef ref) {
+    ref.invalidate(bookingSpotProvider(spotId));
+    context.push('/booking/$spotId/schedule');
+  }
 }
 
-class _Row extends StatelessWidget {
-  const _Row({required this.label, required this.value, this.strong = false});
+class _PropertyDetailsContent extends StatelessWidget {
+  const _PropertyDetailsContent({
+    required this.onBack,
+    required this.onBookNow,
+    required this.spot,
+  });
 
-  final String label;
-  final String value;
-  final bool strong;
+  final VoidCallback onBack;
+  final VoidCallback onBookNow;
+  final ParkingSpot spot;
 
   @override
   Widget build(BuildContext context) {
-    final style = TextStyle(
-      fontWeight: strong ? FontWeight.w900 : FontWeight.w600,
+    return ListingDetailsPage(
+      address: spot.address.isEmpty ? spot.locality : spot.address,
+      description: _descriptionFor(spot),
+      heroImageUrls: spot.imageUrls,
+      listingLabel: 'For Rent',
+      onBack: onBack,
+      onFavorite: () {},
+      onShare: null,
+      onPrimaryAction: onBookNow,
+      bottomNavigationBar: BookingScreen._detailBottomNav,
+      priceText: _priceTextFor(spot),
+      primaryActionLabel: 'Book Now',
+      ratingText: spot.rating > 0 ? spot.rating.toStringAsFixed(1) : '4.8',
+      reviewText: spot.reviewCount > 0 ? '${spot.reviewCount} reviews' : null,
+      sectionsBeforeDescription: [
+        ListingContextSection(
+          hostAvatarUrl: spot.hostAvatarUrl,
+          hostName: spot.hostName ?? 'Urban Parking Host',
+          location: spot.location,
+          onCallTap: _hostContactAction(
+            context,
+            phoneNumber: spot.hostPhone,
+            scheme: 'tel',
+            unavailableMessage: 'Host phone number is not available yet.',
+          ),
+          onMessageTap: _hostContactAction(
+            context,
+            phoneNumber: spot.hostPhone,
+            scheme: 'sms',
+            unavailableMessage: 'Host phone number is not available yet.',
+          ),
+        ),
+      ],
+      stats: _statsFor(spot),
+      title: spot.title,
+      topTitle: 'Property Details',
     );
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        children: [
-          Expanded(child: Text(label, style: style)),
-          Text(value, style: style),
-        ],
+  }
+
+  List<ListingDetailStat> _statsFor(ParkingSpot spot) {
+    final stats = <ListingDetailStat>[
+      ListingDetailStat(
+        '${spot.slotsAvailable} Garage',
+        icon: Icons.local_parking_rounded,
       ),
+      ListingDetailStat(
+        _cadenceLabel(spot.cadence),
+        icon: Icons.schedule_rounded,
+      ),
+    ];
+
+    for (final amenity in spot.amenities.take(3)) {
+      stats.add(
+        ListingDetailStat(_amenityLabel(amenity), icon: _amenityIcon(amenity)),
+      );
+    }
+
+    return stats.take(5).toList(growable: false);
+  }
+
+  String _amenityLabel(ParkingAmenity amenity) {
+    switch (amenity) {
+      case ParkingAmenity.covered:
+        return 'Covered';
+      case ParkingAmenity.security:
+        return 'Security';
+      case ParkingAmenity.evCharging:
+        return 'EV Charging';
+      case ParkingAmenity.cctv:
+        return 'CCTV';
+      case ParkingAmenity.valet:
+        return 'Valet';
+      case ParkingAmenity.twoWheeler:
+        return '2 Wheeler';
+    }
+  }
+
+  IconData _amenityIcon(ParkingAmenity amenity) {
+    switch (amenity) {
+      case ParkingAmenity.covered:
+        return Icons.roofing_rounded;
+      case ParkingAmenity.security:
+        return Icons.verified_user_outlined;
+      case ParkingAmenity.evCharging:
+        return Icons.ev_station_rounded;
+      case ParkingAmenity.cctv:
+        return Icons.videocam_outlined;
+      case ParkingAmenity.valet:
+        return Icons.key_rounded;
+      case ParkingAmenity.twoWheeler:
+        return Icons.two_wheeler_rounded;
+    }
+  }
+
+  String _cadenceLabel(BookingCadence cadence) {
+    switch (cadence) {
+      case BookingCadence.hourly:
+        return 'Hourly';
+      case BookingCadence.daily:
+        return 'Daily';
+      case BookingCadence.monthly:
+        return 'Monthly';
+    }
+  }
+
+  String _priceTextFor(ParkingSpot spot) {
+    final cadence = switch (spot.cadence) {
+      BookingCadence.hourly => 'hr',
+      BookingCadence.daily => 'day',
+      BookingCadence.monthly => 'mo',
+    };
+    return '${formatMoney(spot.price, spot.currency)}/$cadence';
+  }
+
+  String _descriptionFor(ParkingSpot spot) {
+    final locality = spot.locality.isEmpty ? 'this location' : spot.locality;
+    return 'Verified parking space in $locality with secure access, clear host details, and a clean location profile for quick decisions.';
+  }
+
+  VoidCallback? _hostContactAction(
+    BuildContext context, {
+    required String? phoneNumber,
+    required String scheme,
+    required String unavailableMessage,
+  }) {
+    final normalizedPhone = _normalizedPhoneNumber(phoneNumber);
+    if (normalizedPhone == null) return null;
+
+    return () => _launchHostContact(
+      context,
+      phoneNumber: normalizedPhone,
+      scheme: scheme,
+      unavailableMessage: unavailableMessage,
     );
+  }
+
+  Future<void> _launchHostContact(
+    BuildContext context, {
+    required String phoneNumber,
+    required String scheme,
+    required String unavailableMessage,
+  }) async {
+    final uri = Uri(scheme: scheme, path: phoneNumber);
+    final canOpen = await canLaunchUrl(uri);
+    if (canOpen) {
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (launched) return;
+    }
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(unavailableMessage)));
+  }
+
+  String? _normalizedPhoneNumber(String? rawValue) {
+    if (rawValue == null) return null;
+    final cleaned = rawValue.replaceAll(RegExp(r'[^\d+]'), '');
+    return cleaned.isEmpty ? null : cleaned;
   }
 }

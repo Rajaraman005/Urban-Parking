@@ -2,6 +2,15 @@
   "functions": {
     "api/v1/geo-discovery/search.ts": {
       "maxDuration": 10
+    },
+    "api/v1/parking-spots/[id].ts": {
+      "maxDuration": 10
+    },
+    "api/v1/parking-spots.ts": {
+      "maxDuration": 10
+    },
+    "api/v1/bookings/quote.ts": {
+      "maxDuration": 10
     }
   },
   "headers": [

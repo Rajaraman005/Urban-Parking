@@ -7,6 +7,7 @@ import '../core/utils/geo_discovery/geo_discovery_engine.dart';
 import '../core/utils/geo_discovery/geo_repository.dart';
 import '../core/utils/geo_discovery/marketplace_data_sources.dart';
 import '../core/utils/location_service.dart';
+import '../features/parking/data/parking_spot_cache.dart';
 import '../features/parking/data/parking_repository_impl.dart';
 import '../features/parking/domain/parking_repository.dart';
 import 'app_config.dart';
@@ -38,9 +39,14 @@ final locationServiceProvider = Provider<LocationService>((ref) {
   return LocationService();
 });
 
+final parkingSpotCacheProvider = Provider<ParkingSpotCache>((ref) {
+  return ParkingSpotCache();
+});
+
 final parkingRepositoryProvider = Provider<ParkingRepository>((ref) {
   return ParkingRepositoryImpl(
     apiClient: ref.watch(apiClientProvider),
     geoDiscoveryEngine: ref.watch(geoDiscoveryEngineProvider),
+    parkingSpotCache: ref.watch(parkingSpotCacheProvider),
   );
 });
