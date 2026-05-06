@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../../config/app_config.dart';
 import '../../../config/geo_discovery_config.dart';
 import '../../../features/parking/data/mock_parking_data.dart';
+import '../../../features/parking/domain/parking_spot.dart';
 import '../../network/api_client.dart';
 import '../telemetry.dart';
 import 'distance.dart';
@@ -139,6 +140,7 @@ class MockMarketplaceDataSource implements MarketplaceDataSource {
           haversineDistanceKm(center, spot.location),
         );
         final updated = spot.copyWith(distanceKm: distanceKm);
+        final vehicleFit = _vehicleFitFor(updated);
         return GeoDiscoveryEntity<Map<String, Object?>>(
           availabilityStatus: spot.slotsAvailable <= 0
               ? AvailabilityStatus.unavailable
@@ -147,7 +149,12 @@ class MockMarketplaceDataSource implements MarketplaceDataSource {
               : AvailabilityStatus.available,
           currency: spot.currency,
           distanceKm: distanceKm,
-          entity: updated.toJson(),
+          entity: {
+            ...updated.toJson(),
+            'supportedVehicleTypes': _supportedVehicleTypesFor(vehicleFit),
+            'vehicleFit': vehicleFit,
+            'vehicle_fit': vehicleFit,
+          },
           id: spot.id,
           imageUrl: spot.imageUrl,
           location: spot.location,
@@ -201,6 +208,31 @@ class MockMarketplaceDataSource implements MarketplaceDataSource {
         return (right.rating ?? 0).compareTo(left.rating ?? 0);
       case GeoSortKey.distance:
         return left.distanceKm.compareTo(right.distanceKm);
+    }
+  }
+
+  String _vehicleFitFor(ParkingSpot spot) {
+    final title = spot.title.toLowerCase();
+    if (title.contains('bike') || title.contains('two wheeler')) {
+      return 'bike';
+    }
+
+    if (spot.amenities.contains(ParkingAmenity.twoWheeler)) {
+      return 'both';
+    }
+
+    return 'car';
+  }
+
+  List<String> _supportedVehicleTypesFor(String vehicleFit) {
+    switch (vehicleFit) {
+      case 'bike':
+        return const ['bike'];
+      case 'both':
+        return const ['bike', 'car'];
+      case 'car':
+      default:
+        return const ['car'];
     }
   }
 

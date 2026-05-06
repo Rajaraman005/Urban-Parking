@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 declare const process: {
   env: Record<string, string | undefined>;
@@ -62,6 +62,11 @@ interface ParkingPhotoRow {
   sort_order: number | null;
   upload_status: string | null;
 }
+
+type ParkingSearchRow = ParkingSpaceRow & {
+  image_urls?: string[] | null;
+  parking_space_photos?: ParkingPhotoRow[];
+};
 
 interface GeoDiscoveryEntity {
   availabilityStatus: AvailabilityStatus;
@@ -272,7 +277,7 @@ const amenitiesFor = (row: ParkingSpaceRow) => {
     amenities.add("covered");
   }
 
-  return [...amenities];
+  return Array.from(amenities);
 };
 
 const photoUrlsFor = (photos: ParkingPhotoRow[] | undefined) => {
@@ -288,7 +293,176 @@ const photoUrlsFor = (photos: ParkingPhotoRow[] | undefined) => {
     if (url) urls.add(url);
   }
 
-  return [...urls];
+  return Array.from(urls);
+};
+
+const imageUrlsFor = (row: ParkingSearchRow) => {
+  if (Array.isArray(row.image_urls)) {
+    const urls = row.image_urls.map((url) => url?.trim()).filter((url): url is string => Boolean(url));
+    return Array.from(new Set(urls));
+  }
+
+  return photoUrlsFor(row.parking_space_photos);
+};
+
+const supportedVehicleTypesFor = (vehicleFit: string | null) => {
+  switch (vehicleFit) {
+    case "bike":
+      return ["bike"];
+    case "both":
+      return ["bike", "car"];
+    case "car":
+    default:
+      return ["car"];
+  }
+};
+
+const parkingSelectCandidates = [
+  [
+    "id",
+    "title",
+    "address",
+    "locality",
+    "latitude",
+    "longitude",
+    "slots_count",
+    "hourly_price",
+    "availability_summary",
+    "parking_type",
+    "vehicle_fit",
+    "available_from_date",
+    "available_to_date",
+    "daily_start_minute",
+    "daily_end_minute",
+    "parking_space_photos(parking_space_id,secure_url,sort_order,upload_status)",
+  ].join(","),
+  [
+    "id",
+    "title",
+    "address",
+    "locality",
+    "latitude",
+    "longitude",
+    "slots_count",
+    "hourly_price",
+    "availability_summary",
+    "parking_type",
+    "vehicle_fit",
+    "parking_space_photos(parking_space_id,secure_url,sort_order,upload_status)",
+  ].join(","),
+  [
+    "id",
+    "title",
+    "address",
+    "locality",
+    "latitude",
+    "longitude",
+    "slots_count",
+    "hourly_price",
+    "availability_summary",
+    "parking_type",
+    "vehicle_fit",
+    "available_from_date",
+    "available_to_date",
+    "daily_start_minute",
+    "daily_end_minute",
+  ].join(","),
+  [
+    "id",
+    "title",
+    "address",
+    "locality",
+    "latitude",
+    "longitude",
+    "slots_count",
+    "hourly_price",
+    "availability_summary",
+    "parking_type",
+    "vehicle_fit",
+  ].join(","),
+] as const;
+
+const looksLikeSchemaMismatch = (message: string) => {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("column") ||
+    normalized.includes("relationship") ||
+    normalized.includes("schema cache") ||
+    normalized.includes("could not find") ||
+    normalized.includes("does not exist")
+  );
+};
+
+const shouldAttemptTableFallback = (error: unknown) => {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const normalized = error.message.toLowerCase();
+  return (
+    looksLikeSchemaMismatch(error.message) ||
+    normalized.includes("function") ||
+    normalized.includes("permission denied") ||
+    normalized.includes("rpc")
+  );
+};
+
+const databaseError = (message: string) =>
+  Object.assign(new Error(message), {
+    code: "database_error",
+    status: 500,
+  });
+
+const serverConfigError = (message: string) =>
+  Object.assign(new Error(message), {
+    code: "server_config_error",
+    status: 500,
+  });
+
+const queryParkingRows = async (
+  client: SupabaseClient,
+  query: ReturnType<typeof normalizeRequest>,
+  selectClause: string,
+) =>
+  client
+    .from("parking_spaces")
+    .select(selectClause)
+    .eq("status", "active")
+    .not("latitude", "is", null)
+    .not("longitude", "is", null)
+    .gte("latitude", query.latitude - query.radiusKm / 111)
+    .lte("latitude", query.latitude + query.radiusKm / 111)
+    .gte(
+      "longitude",
+      query.longitude -
+        query.radiusKm / (111 * Math.max(Math.cos(toRadians(query.latitude)), 0.2)),
+    )
+    .lte(
+      "longitude",
+      query.longitude +
+        query.radiusKm / (111 * Math.max(Math.cos(toRadians(query.latitude)), 0.2)),
+    )
+    .limit(250);
+
+const loadCompatibleParkingRows = async (
+  client: SupabaseClient,
+  query: ReturnType<typeof normalizeRequest>,
+) => {
+  let lastError: { message: string } | null = null;
+
+  for (const selectClause of parkingSelectCandidates) {
+    const { data, error } = await queryParkingRows(client, query, selectClause);
+    if (!error) {
+      return (data ?? []) as unknown as ParkingSearchRow[];
+    }
+
+    lastError = error;
+    if (!looksLikeSchemaMismatch(error.message)) {
+      break;
+    }
+  }
+
+  throw databaseError(lastError?.message ?? "Parking discovery query failed");
 };
 
 const responseError = (response: VercelResponseLike, error: unknown) => {
@@ -317,48 +491,93 @@ const setCorsHeaders = (response: VercelResponseLike) => {
   response.setHeader("Vary", "Origin");
 };
 
-const supabase = () => {
+const supabaseUrl = () => {
   const url = process.env.SUPABASE_URL ?? process.env.EXPO_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url || !serviceKey) {
-    throw Object.assign(new Error("Missing Supabase server environment variables"), {
-      code: "server_config_error",
-      status: 500
-    });
+  if (!url) {
+    throw serverConfigError("Missing Supabase URL server environment variable");
   }
+  return url;
+};
 
-  return createClient(url, serviceKey, {
+const createServerSupabaseClient = (key: string) =>
+  createClient(supabaseUrl(), key, {
     auth: {
       persistSession: false
     }
   });
+
+const supabaseForRpc = () => {
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ??
+    process.env.SUPABASE_ANON_KEY ??
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!key) {
+    throw serverConfigError("Missing Supabase RPC environment variable");
+  }
+
+  return createServerSupabaseClient(key);
+};
+
+const supabaseForTableFallback = () => {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!serviceKey) {
+    throw serverConfigError("Missing SUPABASE_SERVICE_ROLE_KEY for direct table fallback");
+  }
+
+  return createServerSupabaseClient(serviceKey);
+};
+
+const loadParkingRowsFromRpc = async (
+  client: SupabaseClient,
+  query: ReturnType<typeof normalizeRequest>,
+) => {
+  const { data, error } = await client.rpc("search_public_parking_spots", {
+    p_latitude: query.latitude,
+    p_limit: 250,
+    p_longitude: query.longitude,
+    p_offset: 0,
+    p_radius_km: query.radiusKm,
+  });
+
+  if (error) {
+    throw databaseError(`search_public_parking_spots failed: ${error.message}`);
+  }
+
+  return (data ?? []) as unknown as ParkingSearchRow[];
+};
+
+const loadParkingRows = async (query: ReturnType<typeof normalizeRequest>) => {
+  try {
+    return await loadParkingRowsFromRpc(supabaseForRpc(), query);
+  } catch (rpcError) {
+    if (!shouldAttemptTableFallback(rpcError)) {
+      throw rpcError;
+    }
+
+    try {
+      return await loadCompatibleParkingRows(supabaseForTableFallback(), query);
+    } catch (fallbackError) {
+      if (
+        typeof fallbackError === "object" &&
+        fallbackError !== null &&
+        "code" in fallbackError &&
+        fallbackError.code === "server_config_error"
+      ) {
+        throw rpcError;
+      }
+
+      throw fallbackError;
+    }
+  }
 };
 
 const loadParking = async (query: ReturnType<typeof normalizeRequest>): Promise<GeoDiscoveryPage> => {
   const center = { latitude: query.latitude, longitude: query.longitude };
-  const latitudeBuffer = query.radiusKm / 111;
-  const longitudeBuffer = query.radiusKm / (111 * Math.max(Math.cos(toRadians(query.latitude)), 0.2));
-  const client = supabase();
-  const { data: parkingRows, error } = await client
-    .from("parking_spaces")
-    .select(
-      "id,title,address,locality,latitude,longitude,slots_count,hourly_price,availability_summary,parking_type,vehicle_fit,available_from_date,available_to_date,daily_start_minute,daily_end_minute,parking_space_photos(parking_space_id,secure_url,sort_order,upload_status)",
-    )
-    .eq("status", "active")
-    .not("latitude", "is", null)
-    .not("longitude", "is", null)
-    .gte("latitude", query.latitude - latitudeBuffer)
-    .lte("latitude", query.latitude + latitudeBuffer)
-    .gte("longitude", query.longitude - longitudeBuffer)
-    .lte("longitude", query.longitude + longitudeBuffer)
-    .limit(250);
+  const parkingRows = await loadParkingRows(query);
 
-  if (error) {
-    throw Object.assign(new Error(error.message), { code: "database_error", status: 500 });
-  }
-
-  const entities = ((parkingRows ?? []) as (ParkingSpaceRow & { parking_space_photos?: ParkingPhotoRow[] })[])
+  const entities = parkingRows
     .flatMap((row) => {
       if (row.latitude === null || row.longitude === null) {
         return [];
@@ -371,7 +590,7 @@ const loadParking = async (query: ReturnType<typeof normalizeRequest>): Promise<
         return [];
       }
 
-      const imageUrls = photoUrlsFor(row.parking_space_photos);
+      const imageUrls = imageUrlsFor(row);
       const imageUrl = imageUrls[0] ?? FALLBACK_IMAGE_URL;
       const startDate = datePart(row.available_from_date, 0);
       const endDate = datePart(row.available_to_date, 1);
@@ -400,7 +619,10 @@ const loadParking = async (query: ReturnType<typeof normalizeRequest>): Promise<
             rating: 0,
             reviewCount: 0,
             slotsAvailable: row.slots_count,
-            title: row.title
+            title: row.title,
+            supportedVehicleTypes: supportedVehicleTypesFor(row.vehicle_fit),
+            vehicleFit: row.vehicle_fit,
+            vehicle_fit: row.vehicle_fit
           },
           id: row.id,
           imageUrl,

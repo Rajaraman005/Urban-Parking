@@ -6,6 +6,7 @@ import '../../../core/utils/geo_discovery/geo_types.dart';
 import '../../../shared/formatters.dart';
 import '../../../shared/widgets/product_card.dart';
 import 'home_nearby_controller.dart';
+import 'home_nearby_filtering.dart';
 
 final _homeNearbyFavoriteIdsProvider =
     NotifierProvider<_HomeNearbyFavoriteIdsController, Set<String>>(
@@ -26,7 +27,14 @@ class _HomeNearbyFavoriteIdsController extends Notifier<Set<String>> {
 }
 
 class HomeNearbySection extends ConsumerWidget {
-  const HomeNearbySection({super.key});
+  const HomeNearbySection({
+    super.key,
+    this.onClearVehicleFilter,
+    this.vehicleFilter,
+  });
+
+  final VoidCallback? onClearVehicleFilter;
+  final HomeNearbyVehicleFilter? vehicleFilter;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -38,6 +46,7 @@ class HomeNearbySection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _HomeNearbyHeader(
+            vehicleFilter: vehicleFilter,
             onRefresh: () =>
                 ref.read(homeNearbyControllerProvider.notifier).refresh(),
           ),
@@ -79,7 +88,11 @@ class HomeNearbySection extends ConsumerWidget {
                 );
               }
 
-              return _HomeNearbyResults(state: state);
+              return _HomeNearbyResults(
+                onClearVehicleFilter: onClearVehicleFilter,
+                state: state,
+                vehicleFilter: vehicleFilter,
+              );
             },
           ),
         ],
@@ -89,19 +102,23 @@ class HomeNearbySection extends ConsumerWidget {
 }
 
 class _HomeNearbyHeader extends StatelessWidget {
-  const _HomeNearbyHeader({required this.onRefresh});
+  const _HomeNearbyHeader({
+    required this.onRefresh,
+    required this.vehicleFilter,
+  });
 
   final VoidCallback onRefresh;
+  final HomeNearbyVehicleFilter? vehicleFilter;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const Expanded(
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 'Nearby for you',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -115,7 +132,7 @@ class _HomeNearbyHeader extends StatelessWidget {
               ),
               SizedBox(height: 5),
               Text(
-                'Live spaces from your location',
+                vehicleFilter?.nearbySubtitle ?? 'Live spaces from your location',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -152,13 +169,33 @@ class _HomeNearbyHeader extends StatelessWidget {
 }
 
 class _HomeNearbyResults extends ConsumerWidget {
-  const _HomeNearbyResults({required this.state});
+  const _HomeNearbyResults({
+    required this.state,
+    required this.vehicleFilter,
+    required this.onClearVehicleFilter,
+  });
 
+  final VoidCallback? onClearVehicleFilter;
   final HomeNearbyViewState state;
+  final HomeNearbyVehicleFilter? vehicleFilter;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final favoriteIds = ref.watch(_homeNearbyFavoriteIdsProvider);
+    final filteredItems = filterHomeNearbyItems(state.items, vehicleFilter);
+
+    if (vehicleFilter != null && filteredItems.isEmpty) {
+      return _HomeNearbyMessageCard(
+        icon: vehicleFilter == HomeNearbyVehicleFilter.bike
+            ? Icons.two_wheeler_rounded
+            : Icons.directions_car_rounded,
+        title: vehicleFilter!.emptyTitle,
+        message: vehicleFilter!.emptyMessage,
+        actionLabel: onClearVehicleFilter == null ? 'Refresh' : 'Show all',
+        onAction: onClearVehicleFilter ??
+            () => ref.read(homeNearbyControllerProvider.notifier).refresh(),
+      );
+    }
 
     return Column(
       children: [
@@ -170,12 +207,12 @@ class _HomeNearbyResults extends ConsumerWidget {
           const SizedBox(height: 12),
         ],
         ListView.separated(
-          itemCount: state.items.length,
+          itemCount: filteredItems.length,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           separatorBuilder: (_, _) => const SizedBox(height: 14),
           itemBuilder: (context, index) {
-            final item = state.items[index];
+            final item = filteredItems[index];
             final route = _routeFor(item);
             final isFavorite = favoriteIds.contains(item.id);
             return ProductCard(

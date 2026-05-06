@@ -21,10 +21,20 @@ class LocationResult {
 }
 
 class LocationService {
+  static const _freshLocationTtl = Duration(seconds: 30);
+
+  GeoPoint? _lastResolvedLocation;
+  DateTime? _lastResolvedAt;
+
   Future<LocationResult> currentLocation() async {
-    telemetry.event(TelemetryEvent.geoPermissionRequested);
+    final cached = _freshCachedLocation();
+    if (cached != null) {
+      return cached;
+    }
+
     var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
+      telemetry.event(TelemetryEvent.geoPermissionRequested);
       permission = await Geolocator.requestPermission();
     }
     if (permission == LocationPermission.denied ||
@@ -58,6 +68,7 @@ class LocationService {
         latitude: position.latitude,
         longitude: position.longitude,
       );
+      _rememberLocation(location);
       telemetry.event(TelemetryEvent.geoLocationResolved, {
         'durationMs': DateTime.now().difference(startedAt).inMilliseconds,
         'geocell':
@@ -71,11 +82,19 @@ class LocationService {
       );
     } catch (_) {
       if (lastKnown != null) {
+        final location = GeoPoint(
+          latitude: lastKnown.latitude,
+          longitude: lastKnown.longitude,
+        );
+        _rememberLocation(location);
+        telemetry.event(TelemetryEvent.geoLocationResolved, {
+          'durationMs': DateTime.now().difference(startedAt).inMilliseconds,
+          'geocell':
+              '${location.latitude.toStringAsFixed(3)},${location.longitude.toStringAsFixed(3)}',
+          'status': 'last_known',
+        });
         return LocationResult(
-          location: GeoPoint(
-            latitude: lastKnown.latitude,
-            longitude: lastKnown.longitude,
-          ),
+          location: location,
           permissionDenied: false,
           isFallback: false,
           error: 'Using your last known location.',
@@ -89,5 +108,34 @@ class LocationService {
             'GPS location timed out. Showing central Chennai while location warms up.',
       );
     }
+  }
+
+  LocationResult? _freshCachedLocation() {
+    final location = _lastResolvedLocation;
+    final resolvedAt = _lastResolvedAt;
+    if (location == null || resolvedAt == null) {
+      return null;
+    }
+
+    if (DateTime.now().difference(resolvedAt) > _freshLocationTtl) {
+      return null;
+    }
+
+    telemetry.event(TelemetryEvent.geoLocationResolved, {
+      'durationMs': 0,
+      'geocell':
+          '${location.latitude.toStringAsFixed(3)},${location.longitude.toStringAsFixed(3)}',
+      'status': 'cached',
+    });
+    return LocationResult(
+      location: location,
+      permissionDenied: false,
+      isFallback: false,
+    );
+  }
+
+  void _rememberLocation(GeoPoint location) {
+    _lastResolvedLocation = location;
+    _lastResolvedAt = DateTime.now();
   }
 }

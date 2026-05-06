@@ -58,6 +58,38 @@ void main() {
     expect(second.source, GeoResultSource.cache);
     expect(repository.calls, 1);
   });
+
+  test('engine does not retry non-recoverable backend errors', () async {
+    final repository = _FailingGeoRepository(
+      const GeoDiscoveryError(
+        'Database schema is not ready.',
+        code: GeoFailureCode.databaseError,
+      ),
+    );
+    final engine = GeoDiscoveryEngine(
+      repository: repository,
+      cache: GeoDiscoveryCache(),
+    );
+
+    await expectLater(
+      engine.getNearbyBatch(
+        const GeoDiscoveryBatchQuery(
+          latitude: 13.0827,
+          longitude: 80.2707,
+          serviceTypes: [ServiceType.parking],
+        ),
+      ),
+      throwsA(
+        isA<GeoDiscoveryError>().having(
+          (error) => error.code,
+          'code',
+          GeoFailureCode.databaseError,
+        ),
+      ),
+    );
+
+    expect(repository.calls, 1);
+  });
 }
 
 class _FakeGeoRepository implements GeoDiscoveryRepository {
@@ -97,5 +129,21 @@ class _FakeGeoRepository implements GeoDiscoveryRepository {
       schemaVersion: query.schemaVersion,
       source: GeoResultSource.network,
     );
+  }
+}
+
+class _FailingGeoRepository implements GeoDiscoveryRepository {
+  _FailingGeoRepository(this.error);
+
+  final GeoDiscoveryError error;
+  var calls = 0;
+
+  @override
+  Future<GeoDiscoveryBatchResult<Map<String, Object?>>> searchNearby(
+    GeoDiscoveryNormalizedQuery query, {
+    CancelToken? cancelToken,
+  }) async {
+    calls += 1;
+    throw error;
   }
 }

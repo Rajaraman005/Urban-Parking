@@ -708,84 +708,101 @@ class _BookingBottomBar extends StatelessWidget {
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      'Estimated total',
-                      style: TextStyle(
-                        color: Color(0xFF6B7280),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        height: 1,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    SizedBox(
-                      height: 24,
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            totalText,
-                            maxLines: 1,
-                            softWrap: false,
-                            style: TextStyle(
-                              color: Colors.black,
-                              fontSize: compactTotalText ? 16 : 20,
-                              fontWeight: FontWeight.w900,
-                              height: 1,
-                              letterSpacing: 0,
+              Text(
+                'Late arrivals may incur additional charges under the host policy.',
+                style: TextStyle(
+                  color: const Color(0xFFB42318),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  height: 1.25,
+                  letterSpacing: 0,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'Estimated total',
+                          style: TextStyle(
+                            color: Color(0xFF6B7280),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            height: 1,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        SizedBox(
+                          height: 24,
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                totalText,
+                                maxLines: 1,
+                                softWrap: false,
+                                style: TextStyle(
+                                  color: Colors.black,
+                                  fontSize: compactTotalText ? 16 : 20,
+                                  fontWeight: FontWeight.w900,
+                                  height: 1,
+                                  letterSpacing: 0,
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                flex: 2,
-                child: Material(
-                  color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(18),
-                  clipBehavior: Clip.antiAlias,
-                  child: Ink(
-                    decoration: BoxDecoration(
-                      color: onTap == null
-                          ? Colors.black.withValues(alpha: 0.42)
-                          : Colors.black,
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    flex: 2,
+                    child: Material(
+                      color: Colors.transparent,
                       borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: InkWell(
-                      key: const ValueKey('reserve-slot-cta'),
-                      onTap: onTap,
-                      child: SizedBox(
-                        height: 56,
-                        child: Center(
-                          child: Text(
-                            buttonLabel,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w900,
-                              height: 1,
-                              letterSpacing: 0,
+                      clipBehavior: Clip.antiAlias,
+                      child: Ink(
+                        decoration: BoxDecoration(
+                          color: onTap == null
+                              ? Colors.black.withValues(alpha: 0.42)
+                              : Colors.black,
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: InkWell(
+                          key: const ValueKey('reserve-slot-cta'),
+                          onTap: onTap,
+                          child: SizedBox(
+                            height: 56,
+                            child: Center(
+                              child: Text(
+                                buttonLabel,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w900,
+                                  height: 1,
+                                  letterSpacing: 0,
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ),
             ],
           ),

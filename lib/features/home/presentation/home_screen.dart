@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../shared/widgets/app_screen.dart';
 import '../data/home_discovery_actions.dart';
+import 'home_nearby_filtering.dart';
 import 'home_nearby_section.dart';
 
 typedef _HomeHeroSlide = ({
@@ -16,8 +17,15 @@ typedef _HomeHeroSlide = ({
   String route,
 });
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  HomeNearbyVehicleFilter? _selectedVehicleFilter;
 
   static const _statusBarColor = Colors.white;
   static const _systemUiStyle = SystemUiOverlayStyle(
@@ -53,6 +61,12 @@ class HomeScreen extends StatelessWidget {
     ),
   ];
 
+  void _toggleVehicleFilter(HomeNearbyVehicleFilter filter) {
+    setState(() {
+      _selectedVehicleFilter = _selectedVehicleFilter == filter ? null : filter;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     SystemChrome.setSystemUIOverlayStyle(_systemUiStyle);
@@ -70,8 +84,16 @@ class HomeScreen extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 32),
                 children: [
                   const _HomeHeroCarousel(slides: _slides),
-                  const _DiscoveryActionBar(),
-                  const HomeNearbySection(),
+                  _DiscoveryActionBar(
+                    selectedVehicleFilter: _selectedVehicleFilter,
+                    onVehicleFilterChanged: _toggleVehicleFilter,
+                  ),
+                  HomeNearbySection(
+                    vehicleFilter: _selectedVehicleFilter,
+                    onClearVehicleFilter: () {
+                      setState(() => _selectedVehicleFilter = null);
+                    },
+                  ),
                 ],
               ),
             ),
@@ -420,20 +442,41 @@ class _HomeHeroSkeleton extends StatelessWidget {
 }
 
 class _DiscoveryActionBar extends StatelessWidget {
-  const _DiscoveryActionBar();
+  const _DiscoveryActionBar({
+    required this.onVehicleFilterChanged,
+    required this.selectedVehicleFilter,
+  });
+
+  final ValueChanged<HomeNearbyVehicleFilter> onVehicleFilterChanged;
+  final HomeNearbyVehicleFilter? selectedVehicleFilter;
 
   @override
   Widget build(BuildContext context) {
+    final bikeAction = homeDiscoveryActions[0];
+    final carAction = homeDiscoveryActions[1];
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
       child: Row(
         children: [
           Expanded(
-            child: _DiscoveryActionButton(item: homeDiscoveryActions[0]),
+            child: _DiscoveryActionButton(
+              item: bikeAction,
+              selected:
+                  selectedVehicleFilter == HomeNearbyVehicleFilter.bike,
+              onTap: () =>
+                  onVehicleFilterChanged(HomeNearbyVehicleFilter.bike),
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: _DiscoveryActionButton(item: homeDiscoveryActions[1]),
+            child: _DiscoveryActionButton(
+              item: carAction,
+              selected:
+                  selectedVehicleFilter == HomeNearbyVehicleFilter.car,
+              onTap: () =>
+                  onVehicleFilterChanged(HomeNearbyVehicleFilter.car),
+            ),
           ),
           const SizedBox(width: 10),
           _DiscoveryFilterButton(
@@ -448,27 +491,33 @@ class _DiscoveryActionBar extends StatelessWidget {
 }
 
 class _DiscoveryActionButton extends StatelessWidget {
-  const _DiscoveryActionButton({required this.item});
+  const _DiscoveryActionButton({
+    required this.item,
+    required this.onTap,
+    required this.selected,
+  });
 
   final HomeDiscoveryActionItem item;
+  final VoidCallback onTap;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
     final icon = switch (item.id) {
-      'parking' => Icons.two_wheeler_rounded,
-      'rental' => Icons.directions_car_rounded,
+      'bike' => Icons.two_wheeler_rounded,
+      'car' => Icons.directions_car_rounded,
       _ => Icons.apps_rounded,
     };
 
     return Material(
-      color: Colors.white,
+      color: selected ? const Color(0xFF0B0B0C) : Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
         side: const BorderSide(color: Color(0xFF0B0B0C)),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => context.go(item.route),
+        onTap: onTap,
         child: SizedBox(
           height: 46,
           child: Padding(
@@ -476,7 +525,11 @@ class _DiscoveryActionButton extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, color: const Color(0xFF0B0B0C), size: 17),
+                Icon(
+                  icon,
+                  color: selected ? Colors.white : const Color(0xFF0B0B0C),
+                  size: 17,
+                ),
                 const SizedBox(width: 6),
                 Flexible(
                   child: Text(
@@ -484,8 +537,8 @@ class _DiscoveryActionButton extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Color(0xFF0B0B0C),
+                    style: TextStyle(
+                      color: selected ? Colors.white : const Color(0xFF0B0B0C),
                       fontSize: 12.5,
                       fontWeight: FontWeight.w900,
                       height: 1,

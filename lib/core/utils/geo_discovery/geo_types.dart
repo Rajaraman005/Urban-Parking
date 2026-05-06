@@ -63,6 +63,7 @@ enum GeoFailureCode {
   aborted,
   backendTimeout,
   contractMismatch,
+  databaseError,
   gpsDenied,
   gpsTimeout,
   invalidCursor,
@@ -70,6 +71,7 @@ enum GeoFailureCode {
   offline,
   rateLimited,
   schemaVersionUnsupported,
+  serverConfigError,
   unknown;
 
   String get apiValue {
@@ -78,6 +80,8 @@ enum GeoFailureCode {
         return 'backend_timeout';
       case GeoFailureCode.contractMismatch:
         return 'contract_mismatch';
+      case GeoFailureCode.databaseError:
+        return 'database_error';
       case GeoFailureCode.gpsDenied:
         return 'gps_denied';
       case GeoFailureCode.gpsTimeout:
@@ -90,6 +94,8 @@ enum GeoFailureCode {
         return 'rate_limited';
       case GeoFailureCode.schemaVersionUnsupported:
         return 'schema_version_unsupported';
+      case GeoFailureCode.serverConfigError:
+        return 'server_config_error';
       case GeoFailureCode.aborted:
       case GeoFailureCode.offline:
       case GeoFailureCode.unknown:

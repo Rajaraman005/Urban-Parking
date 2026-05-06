@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 declare const process: {
   env: Record<string, string | undefined>;
@@ -75,22 +75,85 @@ const responseError = (response: VercelResponseLike, error: unknown) => {
   response.status(status).json({ code, message, status });
 };
 
-const supabase = () => {
-  const url = process.env.SUPABASE_URL ?? process.env.EXPO_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const databaseError = (message: string) =>
+  Object.assign(new Error(message), {
+    code: "database_error",
+    status: 500
+  });
 
-  if (!url || !serviceKey) {
-    throw Object.assign(new Error("Missing Supabase server environment variables"), {
-      code: "server_config_error",
-      status: 500
-    });
+const serverConfigError = (message: string) =>
+  Object.assign(new Error(message), {
+    code: "server_config_error",
+    status: 500
+  });
+
+const notFoundError = () =>
+  Object.assign(new Error("Parking spot was not found"), {
+    code: "parking_spot_not_found",
+    status: 404
+  });
+
+const looksLikeSchemaMismatch = (message: string) => {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("column") ||
+    normalized.includes("relationship") ||
+    normalized.includes("schema cache") ||
+    normalized.includes("could not find") ||
+    normalized.includes("does not exist")
+  );
+};
+
+const shouldAttemptTableFallback = (error: unknown) => {
+  if (!(error instanceof Error)) {
+    return false;
   }
 
-  return createClient(url, serviceKey, {
+  const normalized = error.message.toLowerCase();
+  return (
+    looksLikeSchemaMismatch(error.message) ||
+    normalized.includes("function") ||
+    normalized.includes("permission denied") ||
+    normalized.includes("rpc")
+  );
+};
+
+const supabaseUrl = () => {
+  const url = process.env.SUPABASE_URL ?? process.env.EXPO_PUBLIC_SUPABASE_URL;
+  if (!url) {
+    throw serverConfigError("Missing Supabase URL server environment variable");
+  }
+  return url;
+};
+
+const createServerSupabaseClient = (key: string) =>
+  createClient(supabaseUrl(), key, {
     auth: {
       persistSession: false
     }
   });
+
+const supabaseForRpc = () => {
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ??
+    process.env.SUPABASE_ANON_KEY ??
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!key) {
+    throw serverConfigError("Missing Supabase RPC environment variable");
+  }
+
+  return createServerSupabaseClient(key);
+};
+
+const supabaseForTableFallback = () => {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!serviceKey) {
+    throw serverConfigError("Missing SUPABASE_SERVICE_ROLE_KEY for direct table fallback");
+  }
+
+  return createServerSupabaseClient(serviceKey);
 };
 
 const resolveId = (request: VercelRequestLike) => {
@@ -128,7 +191,7 @@ const amenitiesFor = (row: ParkingSpaceRow) => {
     amenities.add("covered");
   }
 
-  return [...amenities];
+  return Array.from(amenities);
 };
 
 const photoUrlsFor = (photos: ParkingPhotoRow[] | undefined) => {
@@ -144,7 +207,7 @@ const photoUrlsFor = (photos: ParkingPhotoRow[] | undefined) => {
     if (url) urls.add(url);
   }
 
-  return [...urls];
+  return Array.from(urls);
 };
 
 const toParkingSpot = (row: ParkingSpaceRow, profile?: ProfileRow | null) => {
@@ -183,7 +246,7 @@ const toParkingSpot = (row: ParkingSpaceRow, profile?: ProfileRow | null) => {
 };
 
 const loadHostProfile = async (
-  client: ReturnType<typeof supabase>,
+  client: SupabaseClient,
   hostId: string,
 ) => {
   const { data, error } = await client
@@ -193,13 +256,162 @@ const loadHostProfile = async (
     .maybeSingle();
 
   if (error) {
-    throw Object.assign(new Error(error.message), {
-      code: "database_error",
-      status: 500
-    });
+    throw databaseError(error.message);
   }
 
   return data as ProfileRow | null;
+};
+
+const parkingDetailSelectCandidates = [
+  [
+    "id",
+    "host_id",
+    "title",
+    "address",
+    "locality",
+    "latitude",
+    "longitude",
+    "slots_count",
+    "hourly_price",
+    "availability_summary",
+    "parking_type",
+    "vehicle_fit",
+    "available_from_date",
+    "available_to_date",
+    "daily_start_minute",
+    "daily_end_minute",
+    "parking_space_photos(secure_url,sort_order,upload_status)"
+  ].join(","),
+  [
+    "id",
+    "host_id",
+    "title",
+    "address",
+    "locality",
+    "latitude",
+    "longitude",
+    "slots_count",
+    "hourly_price",
+    "availability_summary",
+    "parking_type",
+    "vehicle_fit",
+    "parking_space_photos(secure_url,sort_order,upload_status)"
+  ].join(","),
+  [
+    "id",
+    "host_id",
+    "title",
+    "address",
+    "locality",
+    "latitude",
+    "longitude",
+    "slots_count",
+    "hourly_price",
+    "availability_summary",
+    "parking_type",
+    "vehicle_fit",
+    "available_from_date",
+    "available_to_date",
+    "daily_start_minute",
+    "daily_end_minute"
+  ].join(","),
+  [
+    "id",
+    "host_id",
+    "title",
+    "address",
+    "locality",
+    "latitude",
+    "longitude",
+    "slots_count",
+    "hourly_price",
+    "availability_summary",
+    "parking_type",
+    "vehicle_fit"
+  ].join(",")
+] as const;
+
+const loadSpotFromRpc = async (client: SupabaseClient, id: string) => {
+  const { data, error } = await client.rpc("get_public_parking_spot", {
+    p_space_id: id
+  });
+
+  if (error) {
+    throw databaseError(`get_public_parking_spot failed: ${error.message}`);
+  }
+
+  if (!data) {
+    throw notFoundError();
+  }
+
+  return data as Record<string, unknown>;
+};
+
+const queryParkingSpot = async (
+  client: SupabaseClient,
+  id: string,
+  selectClause: string
+) =>
+  client
+    .from("parking_spaces")
+    .select(selectClause)
+    .eq("id", id)
+    .eq("status", "active")
+    .maybeSingle();
+
+const loadCompatibleParkingSpot = async (client: SupabaseClient, id: string) => {
+  let lastError: { message: string } | null = null;
+
+  for (const selectClause of parkingDetailSelectCandidates) {
+    const { data, error } = await queryParkingSpot(client, id, selectClause);
+    if (!error) {
+      return (data ?? null) as unknown as ParkingSpaceRow | null;
+    }
+
+    lastError = error;
+    if (!looksLikeSchemaMismatch(error.message)) {
+      break;
+    }
+  }
+
+  throw databaseError(lastError?.message ?? "Parking spot lookup query failed");
+};
+
+const loadSpotWithTableFallback = async (id: string) => {
+  const client = supabaseForTableFallback();
+  const parkingRow = await loadCompatibleParkingSpot(client, id);
+
+  if (!parkingRow) {
+    throw notFoundError();
+  }
+
+  const profile = await loadHostProfile(client, parkingRow.host_id);
+  return toParkingSpot(parkingRow, profile);
+};
+
+const loadPublicParkingSpot = async (id: string) => {
+  try {
+    return await loadSpotFromRpc(supabaseForRpc(), id);
+  } catch (rpcError) {
+    if (!shouldAttemptTableFallback(rpcError)) {
+      throw rpcError;
+    }
+
+    try {
+      return await loadSpotWithTableFallback(id);
+    } catch (fallbackError) {
+      if (
+        typeof fallbackError === "object" &&
+        fallbackError !== null &&
+        "code" in fallbackError &&
+        fallbackError.code === "server_config_error"
+      ) {
+        throw rpcError;
+      }
+
+      throw fallbackError;
+    }
+  }
 };
 
 export default async function handler(request: VercelRequestLike, response: VercelResponseLike) {
@@ -225,49 +437,7 @@ export default async function handler(request: VercelRequestLike, response: Verc
       });
     }
 
-    const client = supabase();
-    const { data, error } = await client
-      .from("parking_spaces")
-      .select(
-        [
-          "id",
-          "host_id",
-          "title",
-          "address",
-          "locality",
-          "latitude",
-          "longitude",
-          "slots_count",
-          "hourly_price",
-          "availability_summary",
-          "parking_type",
-          "vehicle_fit",
-          "available_from_date",
-          "available_to_date",
-          "daily_start_minute",
-          "daily_end_minute",
-          "parking_space_photos(secure_url,sort_order,upload_status)"
-        ].join(",")
-      )
-      .eq("id", id)
-      .eq("status", "active")
-      .maybeSingle();
-
-    if (error) {
-      throw Object.assign(new Error(error.message), { code: "database_error", status: 500 });
-    }
-
-    if (!data) {
-      throw Object.assign(new Error("Parking spot was not found"), {
-        code: "parking_spot_not_found",
-        status: 404
-      });
-    }
-
-    const parkingRow = data as unknown as ParkingSpaceRow;
-    const profile = await loadHostProfile(client, parkingRow.host_id);
-
-    response.status(200).json(toParkingSpot(parkingRow, profile));
+    response.status(200).json(await loadPublicParkingSpot(id));
   } catch (error) {
     responseError(response, error);
   }

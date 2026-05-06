@@ -74,7 +74,7 @@ class HomeNearbyController extends AsyncNotifier<HomeNearbyViewState> {
             longitude: locationState.location!.longitude,
             radiusKm: GeoDiscoveryConfig.defaultRadiusKm,
             pageSize: 8,
-            serviceTypes: GeoDiscoveryConfig.supportedServiceTypes,
+            serviceTypes: const [ServiceType.parking],
             sort: GeoSortKey.distance,
           ),
           cancelToken: _cancelToken,

@@ -11,7 +11,7 @@ class HomeDiscoveryActionItem {
 }
 
 const homeDiscoveryActions = [
-  HomeDiscoveryActionItem(id: 'parking', label: 'Bike', route: '/search'),
-  HomeDiscoveryActionItem(id: 'rental', label: 'Cars', route: '/rental'),
+  HomeDiscoveryActionItem(id: 'bike', label: 'Bike', route: '/search'),
+  HomeDiscoveryActionItem(id: 'car', label: 'Cars', route: '/search'),
   HomeDiscoveryActionItem(id: 'filter', label: 'Filters', route: '/search'),
 ];

@@ -29,7 +29,11 @@ void main() {
     expect(find.text('Schedule Booking'), findsOneWidget);
     expect(find.text('Select date'), findsOneWidget);
     expect(find.text('Reserve Slot'), findsOneWidget);
-    await tester.drag(pageScrollView, const Offset(0, -260));
+    await tester.scrollUntilVisible(
+      find.text('Vehicle type'),
+      180,
+      scrollable: pageScrollView,
+    );
     await tester.pumpAndSettle();
     expect(find.text('Vehicle type'), findsOneWidget);
     await tester.drag(pageScrollView, const Offset(0, -520));

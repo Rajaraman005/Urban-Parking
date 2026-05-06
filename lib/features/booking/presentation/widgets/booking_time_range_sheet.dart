@@ -78,18 +78,18 @@ class _BookingTimeRangeSheetState extends State<_BookingTimeRangeSheet> {
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
-    final wheelHeight = screenHeight < 720 ? 96.0 : 112.0;
+    final wheelHeight = screenHeight < 720 ? 112.0 : 128.0;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => Navigator.of(context).pop(),
       child: SafeArea(
         top: false,
-        minimum: const EdgeInsets.only(bottom: 12),
+        minimum: const EdgeInsets.only(bottom: 4),
         child: Align(
           alignment: Alignment.bottomCenter,
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: screenHeight * 0.78),
+            constraints: BoxConstraints(maxHeight: screenHeight * 0.80),
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () {},
@@ -99,7 +99,7 @@ class _BookingTimeRangeSheetState extends State<_BookingTimeRangeSheet> {
                   borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
                 ),
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 22),
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -186,7 +186,7 @@ class _BookingTimeRangeSheetState extends State<_BookingTimeRangeSheet> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
                         child: Material(
@@ -220,7 +220,6 @@ class _BookingTimeRangeSheetState extends State<_BookingTimeRangeSheet> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 4),
                     ],
                   ),
                 ),
@@ -306,7 +305,7 @@ class _TimeWheelCard extends StatelessWidget {
         border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
