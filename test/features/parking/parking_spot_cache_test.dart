@@ -82,12 +82,14 @@ void main() {
       'hostAvatarUrl': 'https://example.com/host.jpg',
       'hostPhone': '+91 98765 43210',
       'hostRole': 'host',
+      'isHostedByCurrentUser': true,
     });
 
     expect(spot.hostName, 'Rajesh Kumar');
     expect(spot.hostAvatarUrl, 'https://example.com/host.jpg');
     expect(spot.hostPhone, '+91 98765 43210');
     expect(spot.hostRole, 'host');
+    expect(spot.isHostedByCurrentUser, isTrue);
   });
 
   test('parser honors owner availability summary for booking dates', () {
@@ -108,6 +110,28 @@ void main() {
     expect(spot.availableUntil.day, 31);
     expect(spot.availableUntil.hour, 23);
     expect(spot.availableUntil.minute, 59);
+  });
+
+  test('structured owner availability overrides stale summary text', () {
+    final spot = ParkingSpot.fromJson({
+      'id': 'spot-1',
+      'title': 'Owner scheduled spot',
+      'price': 80,
+      'availability_summary': '2 May - 31 May, All day',
+      'availableFromDate': '2026-06-01',
+      'availableToDate': '2026-06-10',
+      'dailyStartMinute': 9 * 60,
+      'dailyEndMinute': 18 * 60,
+      'availableFrom': '2026-05-02T00:00:00.000+05:30',
+      'availableUntil': '2026-05-31T23:59:00.000+05:30',
+    });
+
+    expect(spot.availableFromDate, DateTime(2026, 6, 1));
+    expect(spot.availableToDate, DateTime(2026, 6, 10));
+    expect(spot.dailyStartMinute, 9 * 60);
+    expect(spot.dailyEndMinute, 18 * 60);
+    expect(spot.availableFrom, DateTime(2026, 6, 1, 9));
+    expect(spot.availableUntil, DateTime(2026, 6, 10, 18));
   });
 }
 

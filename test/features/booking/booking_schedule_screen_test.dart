@@ -211,7 +211,10 @@ class _FakeParkingRepository implements ParkingRepository {
   final DateTime? _availableUntil;
 
   @override
-  Future<ParkingSpot> getById(String id) async {
+  Future<ParkingSpot> getById(
+    String id, {
+    ParkingSpotFetchPolicy fetchPolicy = ParkingSpotFetchPolicy.cacheFirst,
+  }) async {
     final tomorrow = DateTime.now().add(const Duration(days: 1));
     final availableFrom =
         _availableFrom ??
@@ -238,6 +241,10 @@ class _FakeParkingRepository implements ParkingRepository {
       imageUrl: 'https://example.com/parking.jpg',
     );
   }
+
+  @override
+  Future<ParkingSpot> refreshById(String id) =>
+      getById(id, fetchPolicy: ParkingSpotFetchPolicy.networkOnly);
 
   @override
   Future<BookingQuote> quoteBooking({

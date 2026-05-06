@@ -5,7 +5,7 @@
 The mobile app expects this base URL:
 
 ```text
-EXPO_PUBLIC_API_BASE_URL=https://flowaux.in/api/v1
+API_BASE_URL=https://flowaux.in/api/v1
 ```
 
 The Vercel function is:
@@ -24,14 +24,14 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 GEO_DISCOVERY_ALLOWED_ORIGIN=*
 ```
 
-For a public mobile API, keep auth and abuse controls on the backend roadmap. The service role key must only exist in Vercel server env vars, never in Expo public env vars.
+For a public mobile API, keep auth and abuse controls on the backend roadmap. The service role key must only exist in Vercel server env vars, never in client env vars.
 
-## Expo Environment Variable
+## Client Environment Variable
 
 Set this for production builds:
 
 ```text
-EXPO_PUBLIC_API_BASE_URL=https://flowaux.in/api/v1
+API_BASE_URL=https://flowaux.in/api/v1
 ```
 
 With the current domain, the app will call:

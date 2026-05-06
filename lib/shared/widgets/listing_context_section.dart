@@ -43,10 +43,12 @@ class ListingLocationPreviewCard extends StatelessWidget {
   const ListingLocationPreviewCard({
     required this.location,
     super.key,
+    this.attributionOnLeft = false,
     this.height = 126,
     this.zoom = 15,
   });
 
+  final bool attributionOnLeft;
   final double height;
   final GeoPoint location;
   final int zoom;
@@ -90,7 +92,8 @@ class ListingLocationPreviewCard extends StatelessWidget {
               ),
               const Center(child: _MapPinMarker()),
               Positioned(
-                right: 8,
+                left: attributionOnLeft ? 8 : null,
+                right: attributionOnLeft ? null : 8,
                 bottom: 8,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
@@ -175,13 +178,14 @@ class ListingHostCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Row(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisSize: MainAxisSize.max,
                     children: [
                       Flexible(
                         child: Text(
                           hostName,
-                          maxLines: 2,
-                          overflow: TextOverflow.fade,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          softWrap: false,
                           style: const TextStyle(
                             color: Colors.black,
                             fontSize: 17,

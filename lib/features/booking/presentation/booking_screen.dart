@@ -10,6 +10,7 @@ import '../../../shared/widgets/listing_details_page.dart';
 import '../../../shared/widgets/state_view.dart';
 import '../../../shared/widgets/urban_bottom_nav.dart';
 import '../../parking/domain/parking_spot.dart';
+import '../../profile/presentation/profile_display.dart';
 import 'booking_controller.dart';
 
 class BookingScreen extends ConsumerWidget {
@@ -63,7 +64,7 @@ class BookingScreen extends ConsumerWidget {
   }
 }
 
-class _PropertyDetailsContent extends StatelessWidget {
+class _PropertyDetailsContent extends ConsumerWidget {
   const _PropertyDetailsContent({
     required this.onBack,
     required this.onBookNow,
@@ -75,7 +76,15 @@ class _PropertyDetailsContent extends StatelessWidget {
   final ParkingSpot spot;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profileDisplay = spot.isHostedByCurrentUser
+        ? ref.watch(currentProfileDisplayProvider)
+        : null;
+    final hostName =
+        profileDisplay?.displayName ?? spot.hostName ?? 'Urban Parking Host';
+    final hostAvatarUrl = profileDisplay?.avatarUrl ?? spot.hostAvatarUrl;
+    final hostPhone = profileDisplay?.phone ?? spot.hostPhone;
+
     return ListingDetailsPage(
       address: spot.address.isEmpty ? spot.locality : spot.address,
       description: _descriptionFor(spot),
@@ -92,18 +101,18 @@ class _PropertyDetailsContent extends StatelessWidget {
       reviewText: spot.reviewCount > 0 ? '${spot.reviewCount} reviews' : null,
       sectionsBeforeDescription: [
         ListingContextSection(
-          hostAvatarUrl: spot.hostAvatarUrl,
-          hostName: spot.hostName ?? 'Urban Parking Host',
+          hostAvatarUrl: hostAvatarUrl,
+          hostName: hostName,
           location: spot.location,
           onCallTap: _hostContactAction(
             context,
-            phoneNumber: spot.hostPhone,
+            phoneNumber: hostPhone,
             scheme: 'tel',
             unavailableMessage: 'Host phone number is not available yet.',
           ),
           onMessageTap: _hostContactAction(
             context,
-            phoneNumber: spot.hostPhone,
+            phoneNumber: hostPhone,
             scheme: 'sms',
             unavailableMessage: 'Host phone number is not available yet.',
           ),

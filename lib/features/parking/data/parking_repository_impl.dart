@@ -43,8 +43,13 @@ class ParkingRepositoryImpl implements ParkingRepository {
   }
 
   @override
-  Future<ParkingSpot> getById(String id) async {
-    final cached = _parkingSpotCache.getById(id);
+  Future<ParkingSpot> getById(
+    String id, {
+    ParkingSpotFetchPolicy fetchPolicy = ParkingSpotFetchPolicy.cacheFirst,
+  }) async {
+    final cached = fetchPolicy == ParkingSpotFetchPolicy.cacheFirst
+        ? _parkingSpotCache.getById(id)
+        : null;
 
     try {
       final spot = await _loadSpotWithUpgrade(id);
@@ -61,6 +66,11 @@ class ParkingRepositoryImpl implements ParkingRepository {
       if (discovered != null) return discovered;
       throw Exception('Parking spot not found.');
     }
+  }
+
+  @override
+  Future<ParkingSpot> refreshById(String id) {
+    return getById(id, fetchPolicy: ParkingSpotFetchPolicy.networkOnly);
   }
 
   Future<ParkingSpot> _loadSpotWithUpgrade(String id) async {

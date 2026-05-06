@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/app_providers.dart';
 import '../../booking/domain/booking_quote.dart';
 import '../../parking/domain/parking_spot.dart';
+import '../../parking/presentation/parking_listing_store.dart';
 
 final bookingSpotProvider = FutureProvider.family<ParkingSpot, String>((
   ref,
   spotId,
 ) {
-  return ref.watch(parkingRepositoryProvider).getById(spotId);
+  ref.watch(parkingListingRevisionSyncProvider(spotId));
+  return ref.watch(liveParkingSpotProvider(spotId).future);
 });
 
 final bookingQuoteProvider =

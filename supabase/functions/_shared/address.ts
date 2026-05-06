@@ -19,6 +19,7 @@ export interface NormalizedAddressResult {
   postalCode: string | null;
   provider: "nominatim" | "manual";
   raw?: Record<string, unknown>;
+  state: string | null;
 }
 
 interface NominatimAddress {
@@ -29,6 +30,7 @@ interface NominatimAddress {
   municipality?: string;
   neighbourhood?: string;
   postcode?: string;
+  state?: string;
   quarter?: string;
   residential?: string;
   road?: string;
@@ -116,7 +118,8 @@ export const normalizeNominatimResult = (item: NominatimResult): NormalizedAddre
     placeId,
     postalCode: address.postcode ?? null,
     provider: "nominatim",
-    raw: item as Record<string, unknown>
+    raw: item as Record<string, unknown>,
+    state: address.state ?? null
   };
 };
 

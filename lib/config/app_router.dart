@@ -10,6 +10,8 @@ import '../features/legal/data/legal_documents.dart';
 import '../features/legal/presentation/legal_document_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/parking/presentation/search_screen.dart';
+import '../features/parking/presentation/owned_parking_screen.dart';
+import '../features/profile/presentation/personal_details_screen.dart';
 import '../features/profile/presentation/profile_screen.dart';
 import '../features/rental/presentation/rental_screen.dart';
 import '../features/services/presentation/services_screen.dart';
@@ -88,6 +90,31 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/profile',
             builder: (context, state) => const ProfileScreen(),
+          ),
+          GoRoute(
+            path: '/profile/personal-details',
+            builder: (context, state) => const PersonalDetailsScreen(),
+          ),
+          GoRoute(
+            path: '/profile/my-spaces',
+            builder: (context, state) => const OwnedParkingScreen(),
+          ),
+          GoRoute(
+            path: '/profile/my-spaces/:spotId/edit',
+            builder: (context, state) =>
+                OwnedParkingEditScreen(spotId: state.pathParameters['spotId']!),
+          ),
+          GoRoute(
+            path: '/profile/my-spaces/:spotId/address',
+            builder: (context, state) => EditListingAddressScreen(
+              spotId: state.pathParameters['spotId']!,
+            ),
+          ),
+          GoRoute(
+            path: '/profile/my-spaces/:spotId/pricing',
+            builder: (context, state) => EditListingPricingScreen(
+              spotId: state.pathParameters['spotId']!,
+            ),
           ),
         ],
       ),

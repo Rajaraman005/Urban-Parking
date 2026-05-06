@@ -24,11 +24,24 @@ class ParkingSpot {
     required this.location,
     required this.amenities,
     required this.imageUrl,
+    this.addressConfidence,
+    this.addressPlaceId,
+    this.addressProvider,
     this.availabilitySummary,
+    this.availableFromDate,
+    this.availableToDate,
+    this.city,
+    this.dailyEndMinute,
+    this.dailyStartMinute,
     this.hostAvatarUrl,
     this.hostName,
     this.hostPhone,
     this.hostRole,
+    this.isHostedByCurrentUser = false,
+    this.listingRevision = 0,
+    this.postalCode,
+    this.updatedAt,
+    this.version = 1,
     List<String>? imageUrls = const [],
   }) : _imageUrls = imageUrls;
 
@@ -45,14 +58,27 @@ class ParkingSpot {
   final DateTime availableFrom;
   final DateTime availableUntil;
   final String? availabilitySummary;
+  final DateTime? availableFromDate;
+  final DateTime? availableToDate;
+  final int? dailyEndMinute;
+  final int? dailyStartMinute;
   final int slotsAvailable;
   final GeoPoint location;
   final List<ParkingAmenity> amenities;
   final String imageUrl;
+  final double? addressConfidence;
+  final String? addressPlaceId;
+  final String? addressProvider;
   final String? hostAvatarUrl;
   final String? hostName;
   final String? hostPhone;
   final String? hostRole;
+  final String? city;
+  final bool isHostedByCurrentUser;
+  final int listingRevision;
+  final String? postalCode;
+  final DateTime? updatedAt;
+  final int version;
   final List<String>? _imageUrls;
 
   List<String> get imageUrls {
@@ -72,29 +98,77 @@ class ParkingSpot {
     return urls.toList(growable: false);
   }
 
-  ParkingSpot copyWith({double? distanceKm}) => ParkingSpot(
+  ParkingSpot copyWith({
+    String? address,
+    double? addressConfidence,
+    String? addressPlaceId,
+    String? addressProvider,
+    List<ParkingAmenity>? amenities,
+    DateTime? availableFrom,
+    DateTime? availableFromDate,
+    DateTime? availableToDate,
+    DateTime? availableUntil,
+    String? availabilitySummary,
+    BookingCadence? cadence,
+    String? city,
+    String? currency,
+    int? dailyEndMinute,
+    int? dailyStartMinute,
+    double? distanceKm,
+    String? hostAvatarUrl,
+    String? hostName,
+    String? hostPhone,
+    String? hostRole,
+    String? imageUrl,
+    List<String>? imageUrls,
+    bool? isHostedByCurrentUser,
+    int? listingRevision,
+    String? locality,
+    GeoPoint? location,
+    String? postalCode,
+    int? price,
+    double? rating,
+    int? reviewCount,
+    int? slotsAvailable,
+    String? title,
+    DateTime? updatedAt,
+    int? version,
+  }) => ParkingSpot(
     id: id,
-    title: title,
-    address: address,
-    locality: locality,
+    title: title ?? this.title,
+    address: address ?? this.address,
+    locality: locality ?? this.locality,
     distanceKm: distanceKm ?? this.distanceKm,
-    rating: rating,
-    reviewCount: reviewCount,
-    price: price,
-    currency: currency,
-    cadence: cadence,
-    availableFrom: availableFrom,
-    availableUntil: availableUntil,
-    availabilitySummary: availabilitySummary,
-    slotsAvailable: slotsAvailable,
-    location: location,
-    amenities: amenities,
-    imageUrl: imageUrl,
-    hostAvatarUrl: hostAvatarUrl,
-    hostName: hostName,
-    hostPhone: hostPhone,
-    hostRole: hostRole,
-    imageUrls: _imageUrls,
+    rating: rating ?? this.rating,
+    reviewCount: reviewCount ?? this.reviewCount,
+    price: price ?? this.price,
+    currency: currency ?? this.currency,
+    cadence: cadence ?? this.cadence,
+    availableFrom: availableFrom ?? this.availableFrom,
+    availableFromDate: availableFromDate ?? this.availableFromDate,
+    availableToDate: availableToDate ?? this.availableToDate,
+    availableUntil: availableUntil ?? this.availableUntil,
+    availabilitySummary: availabilitySummary ?? this.availabilitySummary,
+    slotsAvailable: slotsAvailable ?? this.slotsAvailable,
+    location: location ?? this.location,
+    amenities: amenities ?? this.amenities,
+    imageUrl: imageUrl ?? this.imageUrl,
+    addressConfidence: addressConfidence ?? this.addressConfidence,
+    addressPlaceId: addressPlaceId ?? this.addressPlaceId,
+    addressProvider: addressProvider ?? this.addressProvider,
+    city: city ?? this.city,
+    dailyEndMinute: dailyEndMinute ?? this.dailyEndMinute,
+    dailyStartMinute: dailyStartMinute ?? this.dailyStartMinute,
+    hostAvatarUrl: hostAvatarUrl ?? this.hostAvatarUrl,
+    hostName: hostName ?? this.hostName,
+    hostPhone: hostPhone ?? this.hostPhone,
+    hostRole: hostRole ?? this.hostRole,
+    isHostedByCurrentUser: isHostedByCurrentUser ?? this.isHostedByCurrentUser,
+    listingRevision: listingRevision ?? this.listingRevision,
+    postalCode: postalCode ?? this.postalCode,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    imageUrls: imageUrls ?? _imageUrls,
   );
 
   Map<String, Object?> toJson() => {
@@ -109,17 +183,30 @@ class ParkingSpot {
     'currency': currency,
     'cadence': cadence.name,
     'availableFrom': availableFrom.toIso8601String(),
+    'availableFromDate': availableFromDate?.toIso8601String(),
+    'availableToDate': availableToDate?.toIso8601String(),
     'availableUntil': availableUntil.toIso8601String(),
     'availabilitySummary': availabilitySummary,
+    'dailyEndMinute': dailyEndMinute,
+    'dailyStartMinute': dailyStartMinute,
     'slotsAvailable': slotsAvailable,
     'location': location.toJson(),
     'amenities': amenities.map((entry) => entry.name).toList(),
     'imageUrl': imageUrl,
     'imageUrls': imageUrls,
+    'addressConfidence': addressConfidence,
+    'addressPlaceId': addressPlaceId,
+    'addressProvider': addressProvider,
+    'city': city,
     'hostAvatarUrl': hostAvatarUrl,
     'hostName': hostName,
     'hostPhone': hostPhone,
     'hostRole': hostRole,
+    'isHostedByCurrentUser': isHostedByCurrentUser,
+    'listingRevision': listingRevision,
+    'postalCode': postalCode,
+    'updatedAt': updatedAt?.toIso8601String(),
+    'version': version,
   };
 
   static ParkingSpot fromDiscoveryEntity(
@@ -159,10 +246,30 @@ class ParkingSpot {
       'availabilitySummary',
       'availability_summary',
     ]);
+    final availableFromDate = _dateOnlyFrom(map, const [
+      'availableFromDate',
+      'available_from_date',
+    ]);
+    final availableToDate = _dateOnlyFrom(map, const [
+      'availableToDate',
+      'available_to_date',
+    ]);
+    final dailyStartMinute = _nullableIntFrom(map, const [
+      'dailyStartMinute',
+      'daily_start_minute',
+    ]);
+    final dailyEndMinute = _nullableIntFrom(map, const [
+      'dailyEndMinute',
+      'daily_end_minute',
+    ]);
     final availabilityWindow = _availabilityWindowFrom(
       availableFromRaw: map['availableFrom'],
       availableUntilRaw: map['availableUntil'],
       availabilitySummary: availabilitySummary,
+      structuredEndDate: availableToDate,
+      structuredEndMinute: dailyEndMinute,
+      structuredStartDate: availableFromDate,
+      structuredStartMinute: dailyStartMinute,
     );
     return ParkingSpot(
       id: map['id'].toString(),
@@ -181,12 +288,29 @@ class ParkingSpot {
       availableFrom: availabilityWindow.start,
       availableUntil: availabilityWindow.end,
       availabilitySummary: availabilitySummary,
+      availableFromDate: availableFromDate,
+      availableToDate: availableToDate,
+      dailyEndMinute: dailyEndMinute,
+      dailyStartMinute: dailyStartMinute,
       slotsAvailable: ((map['slotsAvailable'] ?? 0) as num).toInt(),
       location: _locationFrom(map),
       amenities: (map['amenities'] as List<dynamic>? ?? const [])
           .map(_amenityFrom)
           .toList(),
       imageUrl: imageUrl,
+      addressConfidence: _doubleFrom(map, const [
+        'addressConfidence',
+        'address_confidence',
+      ]),
+      addressPlaceId: _firstStringFrom(map, const [
+        'addressPlaceId',
+        'address_place_id',
+      ]),
+      addressProvider: _firstStringFrom(map, const [
+        'addressProvider',
+        'address_provider',
+      ]),
+      city: _firstStringFrom(map, const ['city']),
       hostAvatarUrl: _firstStringFrom(map, const [
         'hostAvatarUrl',
         'host_avatar_url',
@@ -212,6 +336,18 @@ class ParkingSpot {
         'ownerRole',
         'owner_role',
       ]),
+      isHostedByCurrentUser: _boolFrom(map, const [
+        'isHostedByCurrentUser',
+        'is_hosted_by_current_user',
+      ]),
+      listingRevision: _intFrom(map, const [
+        'listingRevision',
+        'listing_revision',
+        'revision',
+      ]),
+      postalCode: _firstStringFrom(map, const ['postalCode', 'postal_code']),
+      updatedAt: _dateTimeFrom(map, const ['updatedAt', 'updated_at']),
+      version: _intFrom(map, const ['version'], fallback: 1),
       imageUrls: _imageUrlsFrom(map, imageUrl),
     );
   }
@@ -249,14 +385,122 @@ String? _firstStringFrom(Map<String, Object?> map, List<String> keys) {
   return null;
 }
 
+bool _boolFrom(Map<String, Object?> map, List<String> keys) {
+  for (final key in keys) {
+    final value = map[key];
+    if (value is bool) {
+      return value;
+    }
+    if (value is String) {
+      final normalized = value.trim().toLowerCase();
+      if (normalized == 'true') return true;
+      if (normalized == 'false') return false;
+    }
+    if (value is num) {
+      return value != 0;
+    }
+  }
+  return false;
+}
+
+double? _doubleFrom(Map<String, Object?> map, List<String> keys) {
+  for (final key in keys) {
+    final value = map[key];
+    if (value is num) {
+      return value.toDouble();
+    }
+    if (value is String) {
+      final parsed = double.tryParse(value.trim());
+      if (parsed != null) return parsed;
+    }
+  }
+  return null;
+}
+
+int _intFrom(Map<String, Object?> map, List<String> keys, {int fallback = 0}) {
+  for (final key in keys) {
+    final value = map[key];
+    if (value is num) {
+      return value.toInt();
+    }
+    if (value is String) {
+      final parsed = int.tryParse(value.trim());
+      if (parsed != null) return parsed;
+    }
+  }
+  return fallback;
+}
+
+int? _nullableIntFrom(Map<String, Object?> map, List<String> keys) {
+  for (final key in keys) {
+    final value = map[key];
+    if (value is num) {
+      return value.toInt();
+    }
+    if (value is String) {
+      final parsed = int.tryParse(value.trim());
+      if (parsed != null) return parsed;
+    }
+  }
+  return null;
+}
+
+DateTime? _dateTimeFrom(Map<String, Object?> map, List<String> keys) {
+  for (final key in keys) {
+    final value = map[key]?.toString();
+    if (value == null || value.trim().isEmpty) continue;
+    final parsed = DateTime.tryParse(value);
+    if (parsed != null) return parsed;
+  }
+  return null;
+}
+
+DateTime? _dateOnlyFrom(Map<String, Object?> map, List<String> keys) {
+  for (final key in keys) {
+    final value = map[key]?.toString();
+    if (value == null || value.trim().isEmpty) continue;
+    final parsed = DateTime.tryParse(value);
+    if (parsed != null) {
+      return DateTime(parsed.year, parsed.month, parsed.day);
+    }
+  }
+  return null;
+}
+
 _AvailabilityWindow _availabilityWindowFrom({
   required Object? availableFromRaw,
   required Object? availableUntilRaw,
   required String? availabilitySummary,
+  DateTime? structuredEndDate,
+  int? structuredEndMinute,
+  DateTime? structuredStartDate,
+  int? structuredStartMinute,
 }) {
   final structuredStart = DateTime.tryParse(availableFromRaw?.toString() ?? '');
   final structuredEnd = DateTime.tryParse(availableUntilRaw?.toString() ?? '');
   final parsedSummary = _parseAvailabilitySummary(availabilitySummary);
+  final columnStart =
+      structuredStartDate == null || structuredStartMinute == null
+      ? null
+      : _dateAtMinute(structuredStartDate, structuredStartMinute);
+  final columnEnd = structuredEndDate == null || structuredEndMinute == null
+      ? null
+      : _dateAtMinute(
+          structuredEndDate,
+          _displayEndMinute(structuredEndMinute),
+        );
+
+  if (columnStart != null || columnEnd != null) {
+    final start = columnStart ?? structuredStart ?? DateTime.now();
+    var end =
+        columnEnd ??
+        structuredEnd ??
+        DateTime.now().add(const Duration(hours: 3));
+    if (!end.isAfter(start)) {
+      end = start.add(const Duration(hours: 1));
+    }
+    return _AvailabilityWindow(start: start, end: end);
+  }
 
   if (parsedSummary == null) {
     return _AvailabilityWindow(
@@ -266,18 +510,18 @@ _AvailabilityWindow _availabilityWindowFrom({
   }
 
   final baseStartMinute = structuredStart == null
-      ? 8 * 60
+      ? structuredStartMinute ?? 8 * 60
       : structuredStart.hour * 60 + structuredStart.minute;
   final baseEndMinute = structuredEnd == null
-      ? 20 * 60
+      ? structuredEndMinute ?? 20 * 60
       : structuredEnd.hour * 60 + structuredEnd.minute;
   final start = _dateAtMinute(
-    parsedSummary.startDate,
+    structuredStartDate ?? parsedSummary.startDate,
     parsedSummary.startMinute ?? baseStartMinute,
   );
   var end = _dateAtMinute(
-    parsedSummary.endDate,
-    parsedSummary.endMinute ?? baseEndMinute,
+    structuredEndDate ?? parsedSummary.endDate,
+    _displayEndMinute(parsedSummary.endMinute ?? baseEndMinute),
   );
 
   if (!end.isAfter(start)) {
@@ -285,6 +529,11 @@ _AvailabilityWindow _availabilityWindowFrom({
   }
 
   return _AvailabilityWindow(start: start, end: end);
+}
+
+int _displayEndMinute(int minuteOfDay) {
+  if (minuteOfDay >= 24 * 60) return (24 * 60) - 1;
+  return minuteOfDay;
 }
 
 _ParsedAvailabilitySummary? _parseAvailabilitySummary(String? value) {

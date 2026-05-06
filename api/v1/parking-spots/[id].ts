@@ -5,6 +5,7 @@ declare const process: {
 };
 
 interface VercelRequestLike {
+  headers?: Record<string, string | string[] | undefined>;
   method?: string;
   query?: Record<string, string | string[] | undefined>;
 }
@@ -24,9 +25,13 @@ interface ParkingPhotoRow {
 
 interface ParkingSpaceRow {
   address: string | null;
+  address_confidence: number | null;
+  address_place_id: string | null;
+  address_provider: string | null;
   available_from_date: string | null;
   available_to_date: string | null;
   availability_summary: string | null;
+  city: string | null;
   daily_end_minute: number | null;
   daily_start_minute: number | null;
   host_id: string;
@@ -37,9 +42,12 @@ interface ParkingSpaceRow {
   longitude: number | null;
   parking_space_photos?: ParkingPhotoRow[];
   parking_type: string | null;
+  postal_code: string | null;
   slots_count: number;
   title: string | null;
+  updated_at: string | null;
   vehicle_fit: string | null;
+  version: number | null;
 }
 
 interface ProfileRow {
@@ -119,31 +127,64 @@ const shouldAttemptTableFallback = (error: unknown) => {
 };
 
 const supabaseUrl = () => {
-  const url = process.env.SUPABASE_URL ?? process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const url = process.env.SUPABASE_URL;
   if (!url) {
     throw serverConfigError("Missing Supabase URL server environment variable");
   }
   return url;
 };
 
-const createServerSupabaseClient = (key: string) =>
+const createServerSupabaseClient = (key: string, accessToken?: string) =>
   createClient(supabaseUrl(), key, {
     auth: {
       persistSession: false
-    }
+    },
+    global: accessToken
+      ? {
+          headers: {
+            Authorization: `Bearer ${accessToken}`
+          }
+        }
+      : undefined
   });
 
-const supabaseForRpc = () => {
+const bearerTokenFor = (request: VercelRequestLike) => {
+  const header = request.headers?.authorization ?? request.headers?.Authorization;
+  const value = Array.isArray(header) ? header[0] : header;
+  const match = value?.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || null;
+};
+
+const supabaseForRpc = (request: VercelRequestLike) => {
+  const accessToken = bearerTokenFor(request);
+  const anonKey = process.env.SUPABASE_ANON_KEY;
+  if (accessToken && anonKey) {
+    return createServerSupabaseClient(anonKey, accessToken);
+  }
+
   const key =
     process.env.SUPABASE_SERVICE_ROLE_KEY ??
-    process.env.SUPABASE_ANON_KEY ??
-    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+    anonKey;
 
   if (!key) {
     throw serverConfigError("Missing Supabase RPC environment variable");
   }
 
   return createServerSupabaseClient(key);
+};
+
+const authenticatedUserIdFor = async (request: VercelRequestLike) => {
+  const accessToken = bearerTokenFor(request);
+  const anonKey = process.env.SUPABASE_ANON_KEY;
+  if (!accessToken || !anonKey) {
+    return null;
+  }
+
+  const { data, error } = await createServerSupabaseClient(anonKey).auth.getUser(accessToken);
+  if (error || !data.user) {
+    return null;
+  }
+  return data.user.id;
 };
 
 const supabaseForTableFallback = () => {
@@ -210,7 +251,7 @@ const photoUrlsFor = (photos: ParkingPhotoRow[] | undefined) => {
   return Array.from(urls);
 };
 
-const toParkingSpot = (row: ParkingSpaceRow, profile?: ProfileRow | null) => {
+const toParkingSpot = (row: ParkingSpaceRow, profile?: ProfileRow | null, currentUserId?: string | null) => {
   const startDate = datePart(row.available_from_date, 0);
   const endDate = datePart(row.available_to_date, 1);
   const imageUrls = photoUrlsFor(row.parking_space_photos);
@@ -218,11 +259,15 @@ const toParkingSpot = (row: ParkingSpaceRow, profile?: ProfileRow | null) => {
 
   return {
     address: row.address ?? "",
+    addressConfidence: row.address_confidence ?? undefined,
+    addressPlaceId: row.address_place_id?.trim() || undefined,
+    addressProvider: row.address_provider?.trim() || undefined,
     amenities: amenitiesFor(row),
     availabilitySummary: row.availability_summary ?? undefined,
     availableFrom: isoAtMinute(startDate, row.daily_start_minute, 8 * 60),
     availableUntil: isoAtMinute(endDate, row.daily_end_minute, 20 * 60),
     cadence: "hourly",
+    city: row.city?.trim() || undefined,
     currency: "INR",
     distanceKm: 0,
     hostAvatarUrl: profile?.avatar_url?.trim() || undefined,
@@ -232,16 +277,20 @@ const toParkingSpot = (row: ParkingSpaceRow, profile?: ProfileRow | null) => {
     id: row.id,
     imageUrl,
     imageUrls: imageUrls.length > 0 ? imageUrls : [imageUrl],
+    isHostedByCurrentUser: currentUserId === row.host_id,
     locality: row.locality ?? "",
     location: {
       latitude: Number(row.latitude ?? 13.0827),
       longitude: Number(row.longitude ?? 80.2707)
     },
     price: row.hourly_price ?? 0,
+    postalCode: row.postal_code?.trim() || undefined,
     rating: 0,
     reviewCount: 0,
     slotsAvailable: row.slots_count,
-    title: row.title ?? "Parking space"
+    title: row.title ?? "Parking space",
+    updatedAt: row.updated_at ?? undefined,
+    version: row.version ?? 1
   };
 };
 
@@ -268,6 +317,10 @@ const parkingDetailSelectCandidates = [
     "host_id",
     "title",
     "address",
+    "address_confidence",
+    "address_place_id",
+    "address_provider",
+    "city",
     "locality",
     "latitude",
     "longitude",
@@ -275,7 +328,10 @@ const parkingDetailSelectCandidates = [
     "hourly_price",
     "availability_summary",
     "parking_type",
+    "postal_code",
+    "updated_at",
     "vehicle_fit",
+    "version",
     "available_from_date",
     "available_to_date",
     "daily_start_minute",
@@ -287,6 +343,7 @@ const parkingDetailSelectCandidates = [
     "host_id",
     "title",
     "address",
+    "city",
     "locality",
     "latitude",
     "longitude",
@@ -294,7 +351,10 @@ const parkingDetailSelectCandidates = [
     "hourly_price",
     "availability_summary",
     "parking_type",
+    "postal_code",
+    "updated_at",
     "vehicle_fit",
+    "version",
     "parking_space_photos(secure_url,sort_order,upload_status)"
   ].join(","),
   [
@@ -302,6 +362,10 @@ const parkingDetailSelectCandidates = [
     "host_id",
     "title",
     "address",
+    "address_confidence",
+    "address_place_id",
+    "address_provider",
+    "city",
     "locality",
     "latitude",
     "longitude",
@@ -309,7 +373,10 @@ const parkingDetailSelectCandidates = [
     "hourly_price",
     "availability_summary",
     "parking_type",
+    "postal_code",
+    "updated_at",
     "vehicle_fit",
+    "version",
     "available_from_date",
     "available_to_date",
     "daily_start_minute",
@@ -320,6 +387,7 @@ const parkingDetailSelectCandidates = [
     "host_id",
     "title",
     "address",
+    "city",
     "locality",
     "latitude",
     "longitude",
@@ -327,6 +395,8 @@ const parkingDetailSelectCandidates = [
     "hourly_price",
     "availability_summary",
     "parking_type",
+    "postal_code",
+    "updated_at",
     "vehicle_fit"
   ].join(",")
 ] as const;
@@ -377,7 +447,7 @@ const loadCompatibleParkingSpot = async (client: SupabaseClient, id: string) => 
   throw databaseError(lastError?.message ?? "Parking spot lookup query failed");
 };
 
-const loadSpotWithTableFallback = async (id: string) => {
+const loadSpotWithTableFallback = async (id: string, currentUserId?: string | null) => {
   const client = supabaseForTableFallback();
   const parkingRow = await loadCompatibleParkingSpot(client, id);
 
@@ -386,19 +456,22 @@ const loadSpotWithTableFallback = async (id: string) => {
   }
 
   const profile = await loadHostProfile(client, parkingRow.host_id);
-  return toParkingSpot(parkingRow, profile);
+  return toParkingSpot(parkingRow, profile, currentUserId);
 };
 
-const loadPublicParkingSpot = async (id: string) => {
+const loadPublicParkingSpot = async (id: string, request: VercelRequestLike) => {
   try {
-    return await loadSpotFromRpc(supabaseForRpc(), id);
+    return await loadSpotFromRpc(supabaseForRpc(request), id);
   } catch (rpcError) {
     if (!shouldAttemptTableFallback(rpcError)) {
       throw rpcError;
     }
 
     try {
-      return await loadSpotWithTableFallback(id);
+      return await loadSpotWithTableFallback(
+        id,
+        await authenticatedUserIdFor(request)
+      );
     } catch (fallbackError) {
       if (
         typeof fallbackError === "object" &&
@@ -437,7 +510,7 @@ export default async function handler(request: VercelRequestLike, response: Verc
       });
     }
 
-    response.status(200).json(await loadPublicParkingSpot(id));
+    response.status(200).json(await loadPublicParkingSpot(id, request));
   } catch (error) {
     responseError(response, error);
   }

@@ -1,28 +1,510 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-import '../../../shared/widgets/tab_placeholder_screen.dart';
+import '../../../shared/widgets/app_screen.dart';
 import '../../auth/presentation/auth_controller.dart';
+import 'profile_display.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authControllerProvider).value;
+    final authValue = ref.watch(authControllerProvider);
+    final profileDisplay = ref.watch(currentProfileDisplayProvider);
 
-    return TabPlaceholderScreen(
-      icon: Icons.person_outline,
-      sectionLabel: 'Profile',
-      title: auth?.profile?.fullName == null
-          ? 'One place for your account and hosting tools'
-          : 'Hi, ${auth!.profile!.fullName}',
-      subtitle:
-          'A clean account home for personal settings, hosting context, and everything that belongs to the user rather than the trip.',
-      highlights: const ['Account', 'Hosting', 'Payouts'],
-      footerTitle: 'Account essentials live here',
-      footerBody:
-          'Profile is prepared for account settings, host tools, payout details, and the parts of the app users expect to revisit often.',
+    return AppScreen(
+      padded: false,
+      backgroundColor: const Color(0xFFF5F6F8),
+      safeAreaBackgroundColor: const Color(0xFFB9F45E),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(0, 0, 0, 28),
+        children: [
+          _ProfileHero(
+            avatarUrl: profileDisplay.avatarUrl,
+            displayEmail: profileDisplay.displayEmail,
+            displayName: profileDisplay.displayName,
+            isLoading: authValue.isLoading,
+            isSignedIn: profileDisplay.isSignedIn,
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            child: _ProfileSection(
+              title: 'Account',
+              children: [
+                _ProfileActionTile(
+                  icon: Icons.badge_outlined,
+                  title: 'Personal details',
+                  subtitle: 'Name, email, and profile photo',
+                  onTap: () => context.push('/profile/personal-details'),
+                ),
+                _ProfileActionTile(
+                  icon: Icons.bookmark_border_rounded,
+                  title: 'Parking activity',
+                  subtitle: 'Bookings, saved places, and recent searches',
+                  onTap: () => context.go('/search'),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+            child: _ProfileSection(
+              title: 'Hosting',
+              children: [
+                _ProfileActionTile(
+                  icon: Icons.add_home_work_outlined,
+                  title: 'Host a parking space',
+                  subtitle: 'Create or continue your listing setup',
+                  onTap: () => context.push('/setup/host-basics'),
+                ),
+                _ProfileActionTile(
+                  icon: Icons.garage_outlined,
+                  title: 'My parking spaces',
+                  subtitle: 'Edit live price, address, and availability',
+                  onTap: () => context.push('/profile/my-spaces'),
+                ),
+                _ProfileActionTile(
+                  icon: Icons.payments_outlined,
+                  title: 'Payouts',
+                  subtitle: 'Bank details and earning preferences',
+                  onTap: () => context.push('/setup/host-pricing'),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+            child: _ProfileSection(
+              title: 'Support',
+              children: [
+                _ProfileActionTile(
+                  icon: Icons.privacy_tip_outlined,
+                  title: 'Privacy policy',
+                  subtitle: 'How your account data is handled',
+                  onTap: () => context.push('/privacy'),
+                ),
+                _ProfileActionTile(
+                  icon: Icons.description_outlined,
+                  title: 'Terms of use',
+                  subtitle: 'Urban Parking service terms',
+                  onTap: () => context.push('/terms'),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+            child: _ProfileSessionButton(
+              isSignedIn: profileDisplay.isSignedIn,
+              onPressed: () {
+                if (profileDisplay.isSignedIn) {
+                  unawaited(_signOut(context, ref));
+                } else {
+                  context.go('/auth');
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _signOut(BuildContext context, WidgetRef ref) async {
+    await ref.read(authControllerProvider.notifier).signOut();
+    if (context.mounted) {
+      context.go('/auth');
+    }
+  }
+}
+
+class _ProfileHero extends StatelessWidget {
+  const _ProfileHero({
+    required this.avatarUrl,
+    required this.displayEmail,
+    required this.displayName,
+    required this.isLoading,
+    required this.isSignedIn,
+  });
+
+  final String? avatarUrl;
+  final String displayEmail;
+  final String displayName;
+  final bool isLoading;
+  final bool isSignedIn;
+
+  @override
+  Widget build(BuildContext context) {
+    const headerHeight = 158.0;
+    const avatarSize = 76.0;
+
+    return SizedBox(
+      height: 274,
+      child: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            height: headerHeight,
+            child: const ColoredBox(
+              color: Color(0xFFB9F45E),
+              child: _ProfileBrandHeader(),
+            ),
+          ),
+          Positioned(
+            left: 24,
+            top: headerHeight - (avatarSize / 2),
+            child: _ProfileAvatar(avatarUrl: avatarUrl, size: avatarSize),
+          ),
+          Positioned(
+            left: 20,
+            right: 20,
+            top: headerHeight + (avatarSize / 2) + 10,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              isLoading ? 'Loading profile' : displayName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xFF0B0B0C),
+                                fontSize: 27,
+                                fontWeight: FontWeight.w900,
+                                height: 1,
+                                letterSpacing: 0,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 7),
+                          const Icon(
+                            Icons.verified_rounded,
+                            color: Color(0xFF2563EB),
+                            size: 16,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    _ProfileBadge(
+                      icon: isSignedIn
+                          ? Icons.verified_user_outlined
+                          : Icons.login_rounded,
+                      label: isSignedIn ? 'Active' : 'Guest',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  displayEmail,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF71717A),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    height: 1,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileBrandHeader extends StatelessWidget {
+  const _ProfileBrandHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.only(top: 8),
+        child: Text(
+          'Urban Parking',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: Color(0xFF0B0B0C),
+            fontSize: 28,
+            fontWeight: FontWeight.w900,
+            height: 1,
+            letterSpacing: 0,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileAvatar extends StatelessWidget {
+  const _ProfileAvatar({required this.avatarUrl, required this.size});
+
+  final String? avatarUrl;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = avatarUrl?.trim();
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.10),
+            blurRadius: 14,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: ClipOval(
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: ColoredBox(
+            color: const Color(0xFF0B0B0C),
+            child: url == null || url.isEmpty
+                ? const Icon(
+                    Icons.person_outline_rounded,
+                    color: Colors.white,
+                    size: 40,
+                  )
+                : Image.network(
+                    url,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const Icon(
+                      Icons.person_outline_rounded,
+                      color: Colors.white,
+                      size: 40,
+                    ),
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileBadge extends StatelessWidget {
+  const _ProfileBadge({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B0B0C),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: const Color(0xFFB9F45E), size: 13),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w900,
+                height: 1,
+                letterSpacing: 0,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileSection extends StatelessWidget {
+  const _ProfileSection({required this.children, required this.title});
+
+  final List<Widget> children;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 2, bottom: 10),
+          child: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF0B0B0C),
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
+              height: 1,
+              letterSpacing: 0,
+            ),
+          ),
+        ),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+          ),
+          child: Column(
+            children: [
+              for (var index = 0; index < children.length; index++) ...[
+                children[index],
+                if (index != children.length - 1)
+                  Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: Colors.black.withValues(alpha: 0.06),
+                    indent: 62,
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProfileActionTile extends StatelessWidget {
+  const _ProfileActionTile({
+    required this.icon,
+    required this.onTap,
+    required this.subtitle,
+    required this.title,
+  });
+
+  final IconData icon;
+  final VoidCallback onTap;
+  final String subtitle;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          child: Row(
+            children: [
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF3F4F6),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: Icon(icon, color: const Color(0xFF0B0B0C), size: 19),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF0B0B0C),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        height: 1,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF71717A),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        height: 1,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: Color(0xFF71717A),
+                size: 21,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileSessionButton extends StatelessWidget {
+  const _ProfileSessionButton({
+    required this.isSignedIn,
+    required this.onPressed,
+  });
+
+  final bool isSignedIn;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(isSignedIn ? Icons.logout_rounded : Icons.login_rounded),
+      label: Text(isSignedIn ? 'Sign out' : 'Sign in'),
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size.fromHeight(50),
+        foregroundColor: isSignedIn
+            ? const Color(0xFFB91C1C)
+            : const Color(0xFF0B0B0C),
+        side: BorderSide(
+          color: isSignedIn ? const Color(0xFFB91C1C) : const Color(0xFF0B0B0C),
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        textStyle: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w900,
+          height: 1,
+          letterSpacing: 0,
+        ),
+      ),
     );
   }
 }

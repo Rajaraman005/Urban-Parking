@@ -68,7 +68,6 @@ android {
         manifestPlaceholders["googleMapsApiKey"] = configValue(
             "GOOGLE_MAPS_API_KEY",
             "ANDROID_GOOGLE_MAPS_API_KEY",
-            "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY",
             "GOOGLE_ANDROID_API_KEY",
         )
     }

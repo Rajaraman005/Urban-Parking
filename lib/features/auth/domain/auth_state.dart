@@ -13,20 +13,28 @@ class UserProfile {
     this.fullName,
     this.email,
     this.avatarUrl,
+    this.phone,
+    this.gender,
+    this.dob,
     this.intent,
     this.setupStep = 'intent',
     this.setupDraftId,
     this.onboardingCompletedAt,
+    this.version = 1,
   });
 
   final String id;
   final String? fullName;
   final String? email;
   final String? avatarUrl;
+  final String? phone;
+  final String? gender;
+  final DateTime? dob;
   final String? intent;
   final String setupStep;
   final String? setupDraftId;
   final DateTime? onboardingCompletedAt;
+  final int version;
 
   bool get hasCompletedOnboarding => onboardingCompletedAt != null;
 
@@ -35,13 +43,47 @@ class UserProfile {
     fullName: json['full_name']?.toString(),
     email: json['email']?.toString(),
     avatarUrl: json['avatar_url']?.toString(),
+    phone: json['phone']?.toString(),
+    gender: json['gender']?.toString(),
+    dob: DateTime.tryParse(json['dob']?.toString() ?? ''),
     intent: json['intent']?.toString(),
     setupStep: json['setup_step']?.toString() ?? 'intent',
     setupDraftId: json['setup_draft_id']?.toString(),
     onboardingCompletedAt: DateTime.tryParse(
       json['onboarding_completed_at']?.toString() ?? '',
     ),
+    version: (json['version'] as num?)?.toInt() ?? 1,
   );
+
+  UserProfile copyWith({
+    String? avatarUrl,
+    DateTime? dob,
+    String? email,
+    String? fullName,
+    String? gender,
+    String? intent,
+    DateTime? onboardingCompletedAt,
+    String? phone,
+    String? setupDraftId,
+    String? setupStep,
+    int? version,
+  }) {
+    return UserProfile(
+      id: id,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      dob: dob ?? this.dob,
+      email: email ?? this.email,
+      fullName: fullName ?? this.fullName,
+      gender: gender ?? this.gender,
+      intent: intent ?? this.intent,
+      onboardingCompletedAt:
+          onboardingCompletedAt ?? this.onboardingCompletedAt,
+      phone: phone ?? this.phone,
+      setupDraftId: setupDraftId ?? this.setupDraftId,
+      setupStep: setupStep ?? this.setupStep,
+      version: version ?? this.version,
+    );
+  }
 }
 
 class AuthState {

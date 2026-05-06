@@ -5,8 +5,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config/app_config.dart';
 import 'config/app_router.dart';
+import 'config/preview_flags.dart';
+import 'features/parking/presentation/owned_parking_live_sync.dart';
+import 'features/profile/presentation/profile_live_sync.dart';
 import 'core/utils/app_logger.dart';
 import 'core/utils/telemetry.dart';
+import 'shared/widgets/app_loader.dart';
 import 'shared/theme/app_theme.dart';
 
 Future<void> main() async {
@@ -47,7 +51,26 @@ class UrbanParkingApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (showLoaderPreview) {
+      return MaterialApp(
+        title: AppConfig.appName,
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: ThemeMode.system,
+        home: const Scaffold(
+          backgroundColor: Color(0xFFF5F6F8),
+          body: AppLoader(
+            title: 'Urban Parking',
+            body: 'Preparing your parking experience',
+          ),
+        ),
+      );
+    }
+
     final router = ref.watch(appRouterProvider);
+    ref.watch(ownedParkingLiveSyncProvider);
+    ref.watch(profileLiveSyncProvider);
 
     return MaterialApp.router(
       title: AppConfig.appName,

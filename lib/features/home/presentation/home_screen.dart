@@ -25,6 +25,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  HomeNearbyFilterSelection _selectedNearbyFilters =
+      HomeNearbyFilterSelection.defaults;
   HomeNearbyVehicleFilter? _selectedVehicleFilter;
 
   static const _statusBarColor = Colors.white;
@@ -85,13 +87,24 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   const _HomeHeroCarousel(slides: _slides),
                   _DiscoveryActionBar(
+                    onFiltersApplied: (filters) {
+                      setState(() => _selectedNearbyFilters = filters);
+                    },
                     selectedVehicleFilter: _selectedVehicleFilter,
+                    selectedFilters: _selectedNearbyFilters,
                     onVehicleFilterChanged: _toggleVehicleFilter,
                   ),
                   HomeNearbySection(
+                    filters: _selectedNearbyFilters,
                     vehicleFilter: _selectedVehicleFilter,
                     onClearVehicleFilter: () {
                       setState(() => _selectedVehicleFilter = null);
+                    },
+                    onResetFilters: () {
+                      setState(
+                        () => _selectedNearbyFilters =
+                            HomeNearbyFilterSelection.defaults,
+                      );
                     },
                   ),
                 ],
@@ -443,11 +456,15 @@ class _HomeHeroSkeleton extends StatelessWidget {
 
 class _DiscoveryActionBar extends StatelessWidget {
   const _DiscoveryActionBar({
+    required this.onFiltersApplied,
     required this.onVehicleFilterChanged,
+    required this.selectedFilters,
     required this.selectedVehicleFilter,
   });
 
+  final ValueChanged<HomeNearbyFilterSelection> onFiltersApplied;
   final ValueChanged<HomeNearbyVehicleFilter> onVehicleFilterChanged;
+  final HomeNearbyFilterSelection selectedFilters;
   final HomeNearbyVehicleFilter? selectedVehicleFilter;
 
   @override
@@ -462,20 +479,16 @@ class _DiscoveryActionBar extends StatelessWidget {
           Expanded(
             child: _DiscoveryActionButton(
               item: bikeAction,
-              selected:
-                  selectedVehicleFilter == HomeNearbyVehicleFilter.bike,
-              onTap: () =>
-                  onVehicleFilterChanged(HomeNearbyVehicleFilter.bike),
+              selected: selectedVehicleFilter == HomeNearbyVehicleFilter.bike,
+              onTap: () => onVehicleFilterChanged(HomeNearbyVehicleFilter.bike),
             ),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: _DiscoveryActionButton(
               item: carAction,
-              selected:
-                  selectedVehicleFilter == HomeNearbyVehicleFilter.car,
-              onTap: () =>
-                  onVehicleFilterChanged(HomeNearbyVehicleFilter.car),
+              selected: selectedVehicleFilter == HomeNearbyVehicleFilter.car,
+              onTap: () => onVehicleFilterChanged(HomeNearbyVehicleFilter.car),
             ),
           ),
           const SizedBox(width: 10),
@@ -483,6 +496,8 @@ class _DiscoveryActionBar extends StatelessWidget {
             item: homeDiscoveryActions.firstWhere(
               (item) => item.id == 'filter',
             ),
+            onFiltersApplied: onFiltersApplied,
+            selectedFilters: selectedFilters,
           ),
         ],
       ),
@@ -556,9 +571,15 @@ class _DiscoveryActionButton extends StatelessWidget {
 }
 
 class _DiscoveryFilterButton extends StatelessWidget {
-  const _DiscoveryFilterButton({required this.item});
+  const _DiscoveryFilterButton({
+    required this.item,
+    required this.onFiltersApplied,
+    required this.selectedFilters,
+  });
 
   final HomeDiscoveryActionItem item;
+  final ValueChanged<HomeNearbyFilterSelection> onFiltersApplied;
+  final HomeNearbyFilterSelection selectedFilters;
 
   @override
   Widget build(BuildContext context) {
@@ -592,13 +613,21 @@ class _DiscoveryFilterButton extends StatelessWidget {
       showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
+        useRootNavigator: true,
         useSafeArea: true,
+        sheetAnimationStyle: const AnimationStyle(
+          duration: Duration(milliseconds: 460),
+          reverseDuration: Duration(milliseconds: 320),
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        ),
         barrierColor: Colors.black.withValues(alpha: 0.42),
         backgroundColor: Colors.transparent,
         builder: (sheetContext) => _HomeFilterSheet(
-          onApply: (location) {
+          initialSelection: selectedFilters,
+          onApply: (selection) {
             Navigator.of(sheetContext).pop();
-            context.go(location);
+            onFiltersApplied(selection);
           },
         ),
       ),
@@ -607,9 +636,13 @@ class _DiscoveryFilterButton extends StatelessWidget {
 }
 
 class _HomeFilterSheet extends StatefulWidget {
-  const _HomeFilterSheet({required this.onApply});
+  const _HomeFilterSheet({
+    required this.initialSelection,
+    required this.onApply,
+  });
 
-  final ValueChanged<String> onApply;
+  final HomeNearbyFilterSelection initialSelection;
+  final ValueChanged<HomeNearbyFilterSelection> onApply;
 
   @override
   State<_HomeFilterSheet> createState() => _HomeFilterSheetState();
@@ -618,218 +651,210 @@ class _HomeFilterSheet extends StatefulWidget {
 class _HomeFilterSheetState extends State<_HomeFilterSheet> {
   static const _sortOptions = [
     _FilterSortOption(
-      id: 'nearby',
       label: 'Nearby',
       description: 'Shortest distance first',
       icon: Icons.near_me_outlined,
+      value: HomeNearbySortOption.nearby,
     ),
     _FilterSortOption(
-      id: 'low_price',
       label: 'Low price',
       description: 'Best value options',
       icon: Icons.currency_rupee_rounded,
+      value: HomeNearbySortOption.lowPrice,
     ),
     _FilterSortOption(
-      id: 'high_rated',
       label: 'High rated',
       description: 'Top reviewed spaces',
       icon: Icons.star_rounded,
+      value: HomeNearbySortOption.highRated,
     ),
   ];
 
   static const _quickFilters = [
     _QuickFilterOption(
-      id: 'available_now',
       label: 'Available now',
       icon: Icons.flash_on_rounded,
+      value: HomeNearbyQuickFilter.availableNow,
     ),
     _QuickFilterOption(
-      id: 'covered',
       label: 'Covered',
       icon: Icons.roofing_rounded,
+      value: HomeNearbyQuickFilter.covered,
     ),
     _QuickFilterOption(
-      id: 'ev_charging',
       label: 'EV charging',
       icon: Icons.ev_station_rounded,
+      value: HomeNearbyQuickFilter.evCharging,
     ),
     _QuickFilterOption(
-      id: 'security',
       label: 'Security',
       icon: Icons.verified_user_outlined,
+      value: HomeNearbyQuickFilter.security,
     ),
   ];
 
-  String _selectedSort = 'nearby';
-  final Set<String> _selectedFilters = {'available_now'};
+  late Set<HomeNearbyQuickFilter> _selectedFilters;
+  late HomeNearbySortOption _selectedSort;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedSort = widget.initialSelection.sort;
+    _selectedFilters = {...widget.initialSelection.quickFilters};
+  }
 
   @override
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.viewInsetsOf(context).bottom;
 
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 360),
-      curve: Curves.easeOutCubic,
-      builder: (context, value, child) {
-        return Opacity(
-          opacity: value,
-          child: Transform.translate(
-            offset: Offset(0, (1 - value) * 18),
-            child: child,
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomPadding),
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
-        );
-      },
-      child: Padding(
-        padding: EdgeInsets.only(bottom: bottomPadding),
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: DecoratedBox(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 10, 20, 18),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE4E4E7),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: const SizedBox(width: 44, height: 5),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 18),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE4E4E7),
+                        borderRadius: BorderRadius.circular(999),
                       ),
+                      child: const SizedBox(width: 44, height: 5),
                     ),
-                    const SizedBox(height: 18),
-                    Row(
-                      children: [
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Filters',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Color(0xFF0B0B0C),
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w900,
-                                  height: 1.05,
-                                  letterSpacing: 0,
-                                ),
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Filters',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Color(0xFF0B0B0C),
+                                fontSize: 22,
+                                fontWeight: FontWeight.w900,
+                                height: 1.05,
+                                letterSpacing: 0,
                               ),
-                              SizedBox(height: 5),
-                              Text(
-                                'Tune nearby results fast.',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Color(0xFF6B7280),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  height: 1.2,
-                                  letterSpacing: 0,
-                                ),
+                            ),
+                            SizedBox(height: 5),
+                            Text(
+                              'Tune nearby results fast.',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Color(0xFF6B7280),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                height: 1.2,
+                                letterSpacing: 0,
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                        IconButton(
-                          tooltip: 'Close filters',
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.close_rounded),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 22),
-                    const Text(
-                      'Sort by',
-                      style: TextStyle(
-                        color: Color(0xFF0B0B0C),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w900,
-                        height: 1,
-                        letterSpacing: 0,
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    for (final option in _sortOptions) ...[
-                      _FilterSortTile(
-                        option: option,
-                        selected: _selectedSort == option.id,
-                        onTap: () => setState(() => _selectedSort = option.id),
+                      IconButton(
+                        tooltip: 'Close filters',
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded),
                       ),
-                      if (option != _sortOptions.last)
-                        const SizedBox(height: 8),
                     ],
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Quick filters',
-                      style: TextStyle(
-                        color: Color(0xFF0B0B0C),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w900,
-                        height: 1,
-                        letterSpacing: 0,
-                      ),
+                  ),
+                  const SizedBox(height: 22),
+                  const Text(
+                    'Sort by',
+                    style: TextStyle(
+                      color: Color(0xFF0B0B0C),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      height: 1,
+                      letterSpacing: 0,
                     ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final option in _quickFilters)
-                          _QuickFilterChip(
-                            option: option,
-                            selected: _selectedFilters.contains(option.id),
-                            onTap: () => _toggleQuickFilter(option.id),
-                          ),
-                      ],
+                  ),
+                  const SizedBox(height: 10),
+                  for (final option in _sortOptions) ...[
+                    _FilterSortTile(
+                      option: option,
+                      selected: _selectedSort == option.value,
+                      onTap: () => setState(() => _selectedSort = option.value),
                     ),
-                    const SizedBox(height: 24),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: _reset,
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size.fromHeight(48),
-                              foregroundColor: const Color(0xFF0B0B0C),
-                              side: const BorderSide(color: Color(0xFF0B0B0C)),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            child: const Text('Reset'),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 2,
-                          child: FilledButton(
-                            onPressed: () => widget.onApply(_buildLocation()),
-                            style: FilledButton.styleFrom(
-                              minimumSize: const Size.fromHeight(48),
-                              backgroundColor: const Color(0xFF0B0B0C),
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            child: const Text('Apply filters'),
-                          ),
-                        ),
-                      ],
-                    ),
+                    if (option != _sortOptions.last) const SizedBox(height: 8),
                   ],
-                ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Quick filters',
+                    style: TextStyle(
+                      color: Color(0xFF0B0B0C),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      height: 1,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final option in _quickFilters)
+                        _QuickFilterChip(
+                          option: option,
+                          selected: _selectedFilters.contains(option.value),
+                          onTap: () => _toggleQuickFilter(option.value),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _reset,
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(48),
+                            foregroundColor: const Color(0xFF0B0B0C),
+                            side: const BorderSide(color: Color(0xFF0B0B0C)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: const Text('Reset'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: FilledButton(
+                          onPressed: () => widget.onApply(_buildSelection()),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size.fromHeight(48),
+                            backgroundColor: const Color(0xFF0B0B0C),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: const Text('Apply filters'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
@@ -838,31 +863,28 @@ class _HomeFilterSheetState extends State<_HomeFilterSheet> {
     );
   }
 
-  void _toggleQuickFilter(String id) {
+  void _toggleQuickFilter(HomeNearbyQuickFilter filter) {
     setState(() {
-      if (_selectedFilters.contains(id)) {
-        _selectedFilters.remove(id);
+      if (_selectedFilters.contains(filter)) {
+        _selectedFilters.remove(filter);
       } else {
-        _selectedFilters.add(id);
+        _selectedFilters.add(filter);
       }
     });
   }
 
   void _reset() {
     setState(() {
-      _selectedSort = 'nearby';
-      _selectedFilters
-        ..clear()
-        ..add('available_now');
+      _selectedSort = HomeNearbyFilterSelection.defaults.sort;
+      _selectedFilters = {...HomeNearbyFilterSelection.defaults.quickFilters};
     });
   }
 
-  String _buildLocation() {
-    final query = <String, String>{'sort': _selectedSort};
-    if (_selectedFilters.isNotEmpty) {
-      query['filters'] = _selectedFilters.join(',');
-    }
-    return Uri(path: '/search', queryParameters: query).toString();
+  HomeNearbyFilterSelection _buildSelection() {
+    return HomeNearbyFilterSelection(
+      quickFilters: Set.unmodifiable(_selectedFilters),
+      sort: _selectedSort,
+    );
   }
 }
 
@@ -1015,26 +1037,26 @@ class _FilterSortOption {
   const _FilterSortOption({
     required this.description,
     required this.icon,
-    required this.id,
     required this.label,
+    required this.value,
   });
 
   final String description;
   final IconData icon;
-  final String id;
   final String label;
+  final HomeNearbySortOption value;
 }
 
 class _QuickFilterOption {
   const _QuickFilterOption({
     required this.icon,
-    required this.id,
     required this.label,
+    required this.value,
   });
 
   final IconData icon;
-  final String id;
   final String label;
+  final HomeNearbyQuickFilter value;
 }
 
 class _HomeTopBar extends StatelessWidget {

@@ -60,22 +60,15 @@ Operational targets and rollout rules live in
 ## Environment
 
 Local Flutter run/build commands read `.env` through
-`scripts/flutter_with_env.ps1`. The bridge maps existing Expo-style keys such as
-`EXPO_PUBLIC_SUPABASE_URL` into Flutter `--dart-define` keys such as
-`SUPABASE_URL`, without printing secret values.
+`scripts/flutter_with_env.ps1`. The bridge maps Flutter keys such as
+`SUPABASE_URL` into `--dart-define` values without printing secret values.
 
 ```bash
 npm run android
 npm run build:android
 ```
 
-For Android maps, set one of these in `.env`:
-
-```bash
-EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=your-android-google-maps-api-key
-```
-
-or:
+For Android maps, set this in `.env`:
 
 ```bash
 GOOGLE_MAPS_API_KEY=your-android-google-maps-api-key

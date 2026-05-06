@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/utils/geo_discovery/geo_types.dart';
 import '../../../shared/formatters.dart';
 import '../../../shared/widgets/product_card.dart';
 import '../../../shared/widgets/state_view.dart';
+import '../domain/parking_spot.dart';
+import 'parking_listing_store.dart';
 
-class GeoListView extends StatelessWidget {
+class GeoListView extends ConsumerWidget {
   const GeoListView({
     required this.items,
     required this.isLoading,
@@ -27,7 +30,7 @@ class GeoListView extends StatelessWidget {
   final bool permissionDenied;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (permissionDenied) {
       return StateView(
         title: 'Location permission needed',
@@ -60,6 +63,12 @@ class GeoListView extends StatelessWidget {
       );
     }
 
+    ref.watch(
+      visibleParkingListingRevisionsProvider(
+        parkingListingIdsKey(items.map((item) => item.id), maxIds: 20),
+      ),
+    );
+
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       itemCount: items.length + (isStale || partialFailures.isNotEmpty ? 1 : 0),
@@ -80,16 +89,25 @@ class GeoListView extends StatelessWidget {
         final detailsRoute = item.serviceType == ServiceType.parking
             ? '/booking/${item.id}'
             : null;
+        final liveSpot = item.serviceType == ServiceType.parking
+            ? ref.watch(parkingListingSnapshotProvider(item.id))?.spot
+            : null;
 
         return ProductCard(
-          imageUrl: _imageUrlFor(item),
-          title: item.title,
-          subtitle: _subtitleFor(item),
+          imageUrl: liveSpot?.imageUrls.first ?? _imageUrlFor(item),
+          title: liveSpot?.title ?? item.title,
+          subtitle: liveSpot == null
+              ? _subtitleFor(item)
+              : _spotSubtitleFor(liveSpot, item),
           badge: _availabilityLabel(item.availabilityStatus),
-          priceText: item.price == null
-              ? null
-              : formatHourlyMoney(item.price!, item.currency ?? 'INR'),
-          stats: _statsFor(item),
+          priceText: liveSpot == null
+              ? item.price == null
+                    ? null
+                    : formatHourlyMoney(item.price!, item.currency ?? 'INR')
+              : formatHourlyMoney(liveSpot.price, liveSpot.currency),
+          stats: liveSpot == null
+              ? _statsFor(item)
+              : _spotStatsFor(liveSpot, item),
           onTap: detailsRoute == null ? null : () => context.push(detailsRoute),
           onOpenPressed: detailsRoute == null
               ? null
@@ -97,6 +115,19 @@ class GeoListView extends StatelessWidget {
         );
       },
     );
+  }
+
+  String _spotSubtitleFor(
+    ParkingSpot spot,
+    GeoDiscoveryEntity<Map<String, Object?>> item,
+  ) {
+    if (spot.address.trim().isNotEmpty) {
+      return spot.address;
+    }
+    if (spot.locality.trim().isNotEmpty) {
+      return spot.locality;
+    }
+    return '${item.distanceKm.toStringAsFixed(1)} km nearby';
   }
 
   String _imageUrlFor(GeoDiscoveryEntity<Map<String, Object?>> item) {
@@ -169,6 +200,23 @@ class GeoListView extends StatelessWidget {
     );
 
     return stats;
+  }
+
+  List<ProductCardStat> _spotStatsFor(
+    ParkingSpot spot,
+    GeoDiscoveryEntity<Map<String, Object?>> item,
+  ) {
+    return [
+      ProductCardStat(
+        icon: Icons.near_me_outlined,
+        label: '${item.distanceKm.toStringAsFixed(1)} km',
+      ),
+      ProductCardStat(
+        icon: Icons.local_parking_rounded,
+        label: '${spot.slotsAvailable} spots',
+      ),
+      const ProductCardStat(icon: Icons.sync_rounded, label: 'Live'),
+    ];
   }
 }
 

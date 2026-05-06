@@ -59,8 +59,8 @@ const responseError = (response: VercelResponseLike, error: unknown) => {
 };
 
 const supabase = () => {
-  const url = process.env.SUPABASE_URL ?? process.env.EXPO_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  const url = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_ANON_KEY;
 
   if (!url || !serviceKey) {
     throw Object.assign(new Error("Missing Supabase server environment variables"), {

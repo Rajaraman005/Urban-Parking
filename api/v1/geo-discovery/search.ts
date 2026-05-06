@@ -492,7 +492,7 @@ const setCorsHeaders = (response: VercelResponseLike) => {
 };
 
 const supabaseUrl = () => {
-  const url = process.env.SUPABASE_URL ?? process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const url = process.env.SUPABASE_URL;
   if (!url) {
     throw serverConfigError("Missing Supabase URL server environment variable");
   }
@@ -509,8 +509,7 @@ const createServerSupabaseClient = (key: string) =>
 const supabaseForRpc = () => {
   const key =
     process.env.SUPABASE_SERVICE_ROLE_KEY ??
-    process.env.SUPABASE_ANON_KEY ??
-    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+    process.env.SUPABASE_ANON_KEY;
 
   if (!key) {
     throw serverConfigError("Missing Supabase RPC environment variable");

@@ -61,4 +61,15 @@ class AuthController extends AsyncNotifier<AuthState> {
     state = AsyncData(next);
     return next;
   }
+
+  void replaceProfile(UserProfile profile) {
+    final current = state.value;
+    if (current == null) {
+      return;
+    }
+    if (current.user?.id != profile.id) {
+      return;
+    }
+    state = AsyncData(current.copyWith(profile: profile));
+  }
 }

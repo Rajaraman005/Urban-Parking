@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'app_loader.dart';
+
 class StateView extends StatelessWidget {
   const StateView({
     required this.title,
@@ -20,6 +22,10 @@ class StateView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    if (isLoading) {
+      return AppLoader(title: title, body: body);
+    }
+
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
@@ -28,11 +34,6 @@ class StateView extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (isLoading)
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 18),
-                  child: CircularProgressIndicator(),
-                ),
               Text(
                 title,
                 textAlign: TextAlign.center,

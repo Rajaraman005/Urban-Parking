@@ -2,6 +2,56 @@ import '../../../core/utils/geo_discovery/geo_types.dart';
 
 enum HomeNearbyVehicleFilter { bike, car }
 
+enum HomeNearbySortOption { nearby, lowPrice, highRated }
+
+enum HomeNearbyQuickFilter { availableNow, covered, evCharging, security }
+
+class HomeNearbyFilterSelection {
+  const HomeNearbyFilterSelection({
+    this.sort = HomeNearbySortOption.nearby,
+    this.quickFilters = const {},
+  });
+
+  static const defaults = HomeNearbyFilterSelection();
+
+  final Set<HomeNearbyQuickFilter> quickFilters;
+  final HomeNearbySortOption sort;
+
+  bool get isDefault =>
+      sort == HomeNearbySortOption.nearby && quickFilters.isEmpty;
+
+  HomeNearbyFilterSelection copyWith({
+    Set<HomeNearbyQuickFilter>? quickFilters,
+    HomeNearbySortOption? sort,
+  }) {
+    return HomeNearbyFilterSelection(
+      quickFilters: quickFilters ?? this.quickFilters,
+      sort: sort ?? this.sort,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) {
+      return true;
+    }
+
+    return other is HomeNearbyFilterSelection &&
+        other.sort == sort &&
+        other.quickFilters.length == quickFilters.length &&
+        other.quickFilters.containsAll(quickFilters);
+  }
+
+  @override
+  int get hashCode {
+    var filtersHash = 0;
+    for (final filter in quickFilters) {
+      filtersHash ^= filter.hashCode;
+    }
+    return Object.hash(sort, filtersHash);
+  }
+}
+
 extension HomeNearbyVehicleFilterCopy on HomeNearbyVehicleFilter {
   String get label => switch (this) {
     HomeNearbyVehicleFilter.bike => 'Bike',
@@ -24,6 +74,22 @@ extension HomeNearbyVehicleFilterCopy on HomeNearbyVehicleFilter {
     HomeNearbyVehicleFilter.car =>
       'We could not find a nearby car-friendly spot in this area yet.',
   };
+}
+
+List<GeoDiscoveryEntity<Map<String, Object?>>> applyHomeNearbyFilters(
+  List<GeoDiscoveryEntity<Map<String, Object?>>> items, {
+  required HomeNearbyFilterSelection filters,
+  required HomeNearbyVehicleFilter? vehicleFilter,
+}) {
+  final filteredItems = filterHomeNearbyItems(
+    items,
+    vehicleFilter,
+  ).where((item) => _matchesQuickFilters(item, filters.quickFilters)).toList();
+
+  filteredItems.sort(
+    (left, right) => _compareNearbyItems(left, right, filters.sort),
+  );
+  return filteredItems;
 }
 
 List<GeoDiscoveryEntity<Map<String, Object?>>> filterHomeNearbyItems(
@@ -49,7 +115,9 @@ List<GeoDiscoveryEntity<Map<String, Object?>>> filterHomeNearbyItems(
       return scoreCompare;
     }
 
-    final distanceCompare = left.item.distanceKm.compareTo(right.item.distanceKm);
+    final distanceCompare = left.item.distanceKm.compareTo(
+      right.item.distanceKm,
+    );
     if (distanceCompare != 0) {
       return distanceCompare;
     }
@@ -58,6 +126,125 @@ List<GeoDiscoveryEntity<Map<String, Object?>>> filterHomeNearbyItems(
   });
 
   return matches.map((entry) => entry.item).toList(growable: false);
+}
+
+bool _matchesQuickFilters(
+  GeoDiscoveryEntity<Map<String, Object?>> item,
+  Set<HomeNearbyQuickFilter> filters,
+) {
+  for (final filter in filters) {
+    final matches = switch (filter) {
+      HomeNearbyQuickFilter.availableNow => _isAvailableNow(item),
+      HomeNearbyQuickFilter.covered => _containsAnyNearbyKeyword(item, const [
+        'covered',
+        'garage',
+        'basement',
+        'indoor',
+        'sheltered',
+        'roofed',
+      ]),
+      HomeNearbyQuickFilter.evCharging =>
+        _containsAnyNearbyKeyword(item, const [
+          'ev',
+          'evcharging',
+          'electricvehicle',
+          'electricvehiclecharging',
+          'charging',
+          'charger',
+        ]),
+      HomeNearbyQuickFilter.security => _containsAnyNearbyKeyword(item, const [
+        'security',
+        'secure',
+        'secured',
+        'cctv',
+        'guard',
+        'surveillance',
+      ]),
+    };
+
+    if (!matches) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool _isAvailableNow(GeoDiscoveryEntity<Map<String, Object?>> item) {
+  if (item.availabilityStatus != AvailabilityStatus.available &&
+      item.availabilityStatus != AvailabilityStatus.limited) {
+    return false;
+  }
+
+  final slotsAvailable = _intValue(
+    item.entity['slotsAvailable'] ??
+        item.entity['slots_available'] ??
+        item.entity['availableSlots'] ??
+        item.entity['available_slots'],
+  );
+
+  return slotsAvailable == null || slotsAvailable > 0;
+}
+
+int _compareNearbyItems(
+  GeoDiscoveryEntity<Map<String, Object?>> left,
+  GeoDiscoveryEntity<Map<String, Object?>> right,
+  HomeNearbySortOption sort,
+) {
+  return switch (sort) {
+    HomeNearbySortOption.nearby => _compareByDistanceThenRating(left, right),
+    HomeNearbySortOption.lowPrice => _compareByPriceThenDistance(left, right),
+    HomeNearbySortOption.highRated => _compareByRatingThenDistance(left, right),
+  };
+}
+
+int _compareByDistanceThenRating(
+  GeoDiscoveryEntity<Map<String, Object?>> left,
+  GeoDiscoveryEntity<Map<String, Object?>> right,
+) {
+  final distanceCompare = left.distanceKm.compareTo(right.distanceKm);
+  if (distanceCompare != 0) {
+    return distanceCompare;
+  }
+
+  return (right.rating ?? 0).compareTo(left.rating ?? 0);
+}
+
+int _compareByPriceThenDistance(
+  GeoDiscoveryEntity<Map<String, Object?>> left,
+  GeoDiscoveryEntity<Map<String, Object?>> right,
+) {
+  final priceCompare = _compareNullableNumAsc(left.price, right.price);
+  if (priceCompare != 0) {
+    return priceCompare;
+  }
+
+  return _compareByDistanceThenRating(left, right);
+}
+
+int _compareByRatingThenDistance(
+  GeoDiscoveryEntity<Map<String, Object?>> left,
+  GeoDiscoveryEntity<Map<String, Object?>> right,
+) {
+  final ratingCompare = (right.rating ?? 0).compareTo(left.rating ?? 0);
+  if (ratingCompare != 0) {
+    return ratingCompare;
+  }
+
+  return left.distanceKm.compareTo(right.distanceKm);
+}
+
+int _compareNullableNumAsc(num? left, num? right) {
+  if (left == null && right == null) {
+    return 0;
+  }
+  if (left == null) {
+    return 1;
+  }
+  if (right == null) {
+    return -1;
+  }
+  return left.compareTo(right);
 }
 
 class _ScoredNearbyItem {
@@ -84,10 +271,7 @@ class _VehicleSupport {
   final bool supportsCar;
 }
 
-int _matchScoreFor(
-  HomeNearbyVehicleFilter filter,
-  _VehicleSupport support,
-) {
+int _matchScoreFor(HomeNearbyVehicleFilter filter, _VehicleSupport support) {
   if (filter == HomeNearbyVehicleFilter.bike) {
     if (!support.supportsBike) {
       return 0;
@@ -165,7 +349,47 @@ _VehicleSupport _vehicleSupportFor(
   return const _VehicleSupport.none();
 }
 
-_VehicleSupport? _vehicleSupportFromExplicitFields(Map<String, Object?> entity) {
+bool _containsAnyNearbyKeyword(
+  GeoDiscoveryEntity<Map<String, Object?>> item,
+  List<String> keywords,
+) {
+  final normalizedKeywords = keywords.map(_normalizeToken).toList();
+  return _searchableNearbyValues(item).any(
+    (value) => normalizedKeywords.any((keyword) => value.contains(keyword)),
+  );
+}
+
+List<String> _searchableNearbyValues(
+  GeoDiscoveryEntity<Map<String, Object?>> item,
+) {
+  final entity = item.entity;
+  final values = <String>[
+    item.title,
+    entity['title']?.toString() ?? '',
+    entity['address']?.toString() ?? '',
+    entity['locality']?.toString() ?? '',
+    entity['description']?.toString() ?? '',
+    entity['parkingType']?.toString() ?? '',
+    entity['parking_type']?.toString() ?? '',
+  ].map(_normalizeToken).where((value) => value.isNotEmpty).toList();
+
+  for (final key in const [
+    'amenities',
+    'features',
+    'tags',
+    'highlights',
+    'facilityFeatures',
+    'facility_features',
+  ]) {
+    values.addAll(_normalizedValues(entity[key]));
+  }
+
+  return values;
+}
+
+_VehicleSupport? _vehicleSupportFromExplicitFields(
+  Map<String, Object?> entity,
+) {
   for (final key in const [
     'vehicleFit',
     'vehicle_fit',
@@ -284,6 +508,16 @@ List<String> _normalizedValues(Object? rawValue) {
   return values;
 }
 
+int? _intValue(Object? value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.toInt();
+  }
+  return int.tryParse(value?.toString() ?? '');
+}
+
 String _normalizeToken(String? value) {
   return (value ?? '')
       .toLowerCase()
@@ -323,7 +557,5 @@ bool _isBikeToken(String value) {
 }
 
 bool _isCarToken(String value) {
-  return value == 'car' ||
-      value == 'cars' ||
-      value == 'fourwheeler';
+  return value == 'car' || value == 'cars' || value == 'fourwheeler';
 }

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../config/preview_flags.dart';
 import '../../../core/utils/telemetry.dart';
+import '../../../shared/widgets/app_loader.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/presentation/auth_controller.dart';
 
@@ -17,6 +19,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   void initState() {
     super.initState();
+    if (showLoaderPreview) return;
     _boot();
   }
 
@@ -60,23 +63,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Image.asset('src/assets/logo-mark.png', width: 144, height: 144),
-            const SizedBox(height: 16),
-            Text(
-              'Urban Parking',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ],
-        ),
+    return const Scaffold(
+      backgroundColor: Color(0xFFF5F6F8),
+      body: AppLoader(
+        title: 'Urban Parking',
+        body: 'Preparing your parking experience',
       ),
     );
   }

@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/utils/geo_discovery/geo_types.dart';
 import '../../../shared/formatters.dart';
 import '../../../shared/widgets/product_card.dart';
+import '../../parking/domain/parking_spot.dart';
+import '../../parking/presentation/parking_listing_store.dart';
 import 'home_nearby_controller.dart';
 import 'home_nearby_filtering.dart';
 
@@ -29,11 +31,15 @@ class _HomeNearbyFavoriteIdsController extends Notifier<Set<String>> {
 class HomeNearbySection extends ConsumerWidget {
   const HomeNearbySection({
     super.key,
+    this.filters = HomeNearbyFilterSelection.defaults,
     this.onClearVehicleFilter,
+    this.onResetFilters,
     this.vehicleFilter,
   });
 
+  final HomeNearbyFilterSelection filters;
   final VoidCallback? onClearVehicleFilter;
+  final VoidCallback? onResetFilters;
   final HomeNearbyVehicleFilter? vehicleFilter;
 
   @override
@@ -89,7 +95,9 @@ class HomeNearbySection extends ConsumerWidget {
               }
 
               return _HomeNearbyResults(
+                filters: filters,
                 onClearVehicleFilter: onClearVehicleFilter,
+                onResetFilters: onResetFilters,
                 state: state,
                 vehicleFilter: vehicleFilter,
               );
@@ -132,7 +140,8 @@ class _HomeNearbyHeader extends StatelessWidget {
               ),
               SizedBox(height: 5),
               Text(
-                vehicleFilter?.nearbySubtitle ?? 'Live spaces from your location',
+                vehicleFilter?.nearbySubtitle ??
+                    'Live spaces from your location',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -147,8 +156,13 @@ class _HomeNearbyHeader extends StatelessWidget {
           ),
         ),
         Material(
-          color: const Color(0xFFF7F7F8),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          color: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: Colors.black.withValues(alpha: 0.08)),
+          ),
+          elevation: 0,
+          shadowColor: Colors.black.withValues(alpha: 0.12),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onRefresh,
@@ -170,32 +184,60 @@ class _HomeNearbyHeader extends StatelessWidget {
 
 class _HomeNearbyResults extends ConsumerWidget {
   const _HomeNearbyResults({
+    required this.filters,
+    required this.onResetFilters,
     required this.state,
     required this.vehicleFilter,
     required this.onClearVehicleFilter,
   });
 
+  final HomeNearbyFilterSelection filters;
   final VoidCallback? onClearVehicleFilter;
+  final VoidCallback? onResetFilters;
   final HomeNearbyViewState state;
   final HomeNearbyVehicleFilter? vehicleFilter;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final favoriteIds = ref.watch(_homeNearbyFavoriteIdsProvider);
-    final filteredItems = filterHomeNearbyItems(state.items, vehicleFilter);
+    final vehicleItems = filterHomeNearbyItems(state.items, vehicleFilter);
+    final filteredItems = applyHomeNearbyFilters(
+      state.items,
+      filters: filters,
+      vehicleFilter: vehicleFilter,
+    );
 
-    if (vehicleFilter != null && filteredItems.isEmpty) {
+    if (vehicleFilter != null && vehicleItems.isEmpty) {
       return _HomeNearbyMessageCard(
         icon: vehicleFilter == HomeNearbyVehicleFilter.bike
             ? Icons.two_wheeler_rounded
             : Icons.directions_car_rounded,
         title: vehicleFilter!.emptyTitle,
         message: vehicleFilter!.emptyMessage,
-        actionLabel: onClearVehicleFilter == null ? 'Refresh' : 'Show all',
-        onAction: onClearVehicleFilter ??
+        actionLabel: onClearVehicleFilter == null ? 'Refresh' : 'Clear filter',
+        onAction:
+            onClearVehicleFilter ??
             () => ref.read(homeNearbyControllerProvider.notifier).refresh(),
       );
     }
+
+    if (filteredItems.isEmpty) {
+      return _HomeNearbyMessageCard(
+        icon: Icons.tune_rounded,
+        title: 'No spaces match these filters',
+        message: 'Try removing a quick filter to see more nearby spaces.',
+        actionLabel: onResetFilters == null ? 'Refresh' : 'Reset filters',
+        onAction:
+            onResetFilters ??
+            () => ref.read(homeNearbyControllerProvider.notifier).refresh(),
+      );
+    }
+
+    ref.watch(
+      visibleParkingListingRevisionsProvider(
+        parkingListingIdsKey(filteredItems.map((item) => item.id), maxIds: 8),
+      ),
+    );
 
     return Column(
       children: [
@@ -215,14 +257,23 @@ class _HomeNearbyResults extends ConsumerWidget {
             final item = filteredItems[index];
             final route = _routeFor(item);
             final isFavorite = favoriteIds.contains(item.id);
+            final liveSpot = item.serviceType == ServiceType.parking
+                ? ref.watch(parkingListingSnapshotProvider(item.id))?.spot
+                : null;
             return ProductCard(
-              imageUrl: _imageUrlFor(item),
-              title: item.title,
-              subtitle: _subtitleFor(item),
-              priceText: item.price == null
-                  ? null
-                  : formatHourlyMoney(item.price!, item.currency ?? 'INR'),
-              stats: _statsFor(item),
+              imageUrl: liveSpot?.imageUrls.first ?? _imageUrlFor(item),
+              title: liveSpot?.title ?? item.title,
+              subtitle: liveSpot == null
+                  ? _subtitleFor(item)
+                  : _spotSubtitleFor(liveSpot, item),
+              priceText: liveSpot == null
+                  ? item.price == null
+                        ? null
+                        : formatHourlyMoney(item.price!, item.currency ?? 'INR')
+                  : formatHourlyMoney(liveSpot.price, liveSpot.currency),
+              stats: liveSpot == null
+                  ? _statsFor(item)
+                  : _spotStatsFor(liveSpot, item),
               statsEvenlySpaced: true,
               favoriteSelected: isFavorite,
               imageHeight: 162,
@@ -235,6 +286,19 @@ class _HomeNearbyResults extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  String _spotSubtitleFor(
+    ParkingSpot spot,
+    GeoDiscoveryEntity<Map<String, Object?>> item,
+  ) {
+    if (spot.address.trim().isNotEmpty) {
+      return spot.address;
+    }
+    if (spot.locality.trim().isNotEmpty) {
+      return spot.locality;
+    }
+    return '${item.distanceKm.toStringAsFixed(1)} km nearby';
   }
 
   String? _routeFor(GeoDiscoveryEntity<Map<String, Object?>> item) {
@@ -296,6 +360,23 @@ class _HomeNearbyResults extends ConsumerWidget {
     );
 
     return stats;
+  }
+
+  List<ProductCardStat> _spotStatsFor(
+    ParkingSpot spot,
+    GeoDiscoveryEntity<Map<String, Object?>> item,
+  ) {
+    return [
+      ProductCardStat(
+        icon: Icons.near_me_outlined,
+        label: '${item.distanceKm.toStringAsFixed(1)} km',
+      ),
+      ProductCardStat(
+        icon: Icons.local_parking_rounded,
+        label: '${spot.slotsAvailable} spots',
+      ),
+      ProductCardStat(icon: Icons.sync_rounded, label: 'Live'),
+    ];
   }
 }
 
@@ -376,74 +457,125 @@ class _HomeNearbyMessageCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F7F8),
+        color: const Color(0xFF111113),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.14),
+            blurRadius: 28,
+            offset: const Offset(0, 16),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            DecoratedBox(
-              decoration: const BoxDecoration(
-                color: Color(0xFF0B0B0C),
-                shape: BoxShape.circle,
-              ),
-              child: SizedBox(
-                width: 40,
-                height: 40,
-                child: Icon(icon, color: Colors.white, size: 20),
+            Align(
+              alignment: Alignment.center,
+              child: _HomeNearbyMessageIcon(icon: icon),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 17,
+                fontWeight: FontWeight.w900,
+                height: 1.1,
+                letterSpacing: 0,
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF0B0B0C),
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                      height: 1.15,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    message,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF71717A),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      height: 1.25,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  FilledButton(
-                    onPressed: onAction,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF0B0B0C),
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(112, 40),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: Text(actionLabel),
-                  ),
-                ],
+            const SizedBox(height: 7),
+            Text(
+              message,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.68),
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                height: 1.28,
+                letterSpacing: 0,
+              ),
+            ),
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: onAction,
+              icon: Icon(_actionIconFor(actionLabel), size: 18),
+              label: Text(
+                actionLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF0B0B0C),
+                minimumSize: const Size.fromHeight(44),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  height: 1,
+                  letterSpacing: 0,
+                ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  IconData _actionIconFor(String label) {
+    final normalized = label.toLowerCase();
+    if (normalized.contains('clear')) {
+      return Icons.layers_clear_rounded;
+    }
+    if (normalized.contains('retry') || normalized.contains('refresh')) {
+      return Icons.refresh_rounded;
+    }
+    if (normalized.contains('try')) {
+      return Icons.location_searching_rounded;
+    }
+    return Icons.arrow_forward_rounded;
+  }
+}
+
+class _HomeNearbyMessageIcon extends StatelessWidget {
+  const _HomeNearbyMessageIcon({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFB9F45E),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFB9F45E).withValues(alpha: 0.28),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: SizedBox(
+        width: 46,
+        height: 46,
+        child: Icon(icon, color: const Color(0xFF0B0B0C), size: 22),
       ),
     );
   }

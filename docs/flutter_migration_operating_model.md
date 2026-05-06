@@ -40,8 +40,8 @@ Location behavior:
 
 ## Rollout
 
-Keep the last React Native production build available until Flutter is fully
-stable. Roll out via internal QA, alpha, beta, then staged production
+Keep the last production build available until Flutter is fully stable. Roll
+out via internal QA, alpha, beta, then staged production
 25/50/100. Halt rollout and promote the prior store build if any rollback
 trigger fires.
 
