@@ -173,8 +173,19 @@ void main() {
   testWidgets('same-day booking summary keeps the date only once', (
     tester,
   ) async {
-    final startAt = DateTime(2026, 5, 7, 9);
-    final endAt = DateTime(2026, 5, 7, 18);
+    final bookingDay = DateTime.now().add(const Duration(days: 1));
+    final startAt = DateTime(
+      bookingDay.year,
+      bookingDay.month,
+      bookingDay.day,
+      9,
+    );
+    final endAt = DateTime(
+      bookingDay.year,
+      bookingDay.month,
+      bookingDay.day,
+      18,
+    );
 
     await tester.pumpWidget(
       ProviderScope(

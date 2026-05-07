@@ -57,7 +57,7 @@ class UrbanParkingApp extends ConsumerWidget {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
         darkTheme: AppTheme.dark,
-        themeMode: ThemeMode.system,
+        themeMode: ThemeMode.light,
         home: const Scaffold(
           backgroundColor: Color(0xFFF5F6F8),
           body: AppLoader(
@@ -77,7 +77,7 @@ class UrbanParkingApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.system,
+      themeMode: ThemeMode.light,
       routerConfig: router,
     );
   }

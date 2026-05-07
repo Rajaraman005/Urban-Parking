@@ -92,6 +92,25 @@ void main() {
     expect(spot.isHostedByCurrentUser, isTrue);
   });
 
+  test('parser maps host-written listing description from Supabase fields', () {
+    final spot = ParkingSpot.fromJson({
+      'id': 'spot-1',
+      'title': 'Hosted spot',
+      'price': 80,
+      'access_instructions':
+          'Covered slot near the north gate with clear night lighting.',
+    });
+
+    expect(
+      spot.description,
+      'Covered slot near the north gate with clear night lighting.',
+    );
+    expect(
+      spot.toJson()['description'],
+      'Covered slot near the north gate with clear night lighting.',
+    );
+  });
+
   test('parser honors owner availability summary for booking dates', () {
     final spot = ParkingSpot.fromJson({
       'id': 'spot-1',
@@ -122,6 +141,7 @@ void main() {
       'availableToDate': '2026-06-10',
       'dailyStartMinute': 9 * 60,
       'dailyEndMinute': 18 * 60,
+      'skipWeekends': true,
       'availableFrom': '2026-05-02T00:00:00.000+05:30',
       'availableUntil': '2026-05-31T23:59:00.000+05:30',
     });
@@ -130,6 +150,7 @@ void main() {
     expect(spot.availableToDate, DateTime(2026, 6, 10));
     expect(spot.dailyStartMinute, 9 * 60);
     expect(spot.dailyEndMinute, 18 * 60);
+    expect(spot.skipWeekends, isTrue);
     expect(spot.availableFrom, DateTime(2026, 6, 1, 9));
     expect(spot.availableUntil, DateTime(2026, 6, 10, 18));
   });

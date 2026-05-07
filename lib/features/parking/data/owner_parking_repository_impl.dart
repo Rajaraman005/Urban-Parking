@@ -2,8 +2,28 @@ import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 import '../../../config/app_config.dart';
 import '../../../core/errors/app_failure.dart';
+import '../../../core/utils/app_logger.dart';
 import '../domain/owner_parking_repository.dart';
+import '../domain/parking_availability.dart';
 import '../domain/parking_spot.dart';
+
+bool isPricingSkipWeekendsRpcUnavailable(sb.PostgrestException error) {
+  final text = [error.message, error.details, error.hint]
+      .whereType<Object>()
+      .map((value) => value.toString())
+      .join(' ')
+      .toLowerCase();
+  final isFunctionLookupFailure =
+      error.code == 'PGRST202' ||
+      error.code == 'PGRST203' ||
+      text.contains('could not find the function') ||
+      text.contains('schema cache') ||
+      text.contains('overloaded') ||
+      text.contains('parameter');
+
+  return isFunctionLookupFailure &&
+      text.contains('update_owned_parking_space_pricing');
+}
 
 class OwnerParkingRepositoryImpl implements OwnerParkingRepository {
   sb.SupabaseClient get _client => sb.Supabase.instance.client;
@@ -12,10 +32,34 @@ class OwnerParkingRepositoryImpl implements OwnerParkingRepository {
   Future<List<ParkingSpot>> listOwnedSpaces() async {
     _assertReady();
     try {
-      final response = await _client.rpc('get_owned_parking_spaces');
-      if (response is! List) {
-        return const [];
-      }
+      final response = await _client
+          .from('parking_spaces')
+          .select(
+            '*, parking_space_photos(parking_space_id, secure_url, sort_order, upload_status)',
+          )
+          .eq('host_id', _client.auth.currentUser!.id)
+          .inFilter('status', const ['active', 'draft', 'pending_review'])
+          .order('updated_at', ascending: false);
+      final legacySpaces = response
+          .whereType<Map>()
+          .map(
+            (entry) => ParkingSpot.fromJson(Map<String, Object?>.from(entry)),
+          )
+          .toList(growable: false);
+      final v2Drafts = await _listHostParkingDrafts();
+      return [...v2Drafts, ...legacySpaces];
+    } on sb.PostgrestException catch (error) {
+      throw AuthFailure(
+        'Could not load your parking spaces.',
+        code: error.code ?? 'owned_parking_load_failed',
+      );
+    }
+  }
+
+  Future<List<ParkingSpot>> _listHostParkingDrafts() async {
+    try {
+      final response = await _client.rpc('get_owned_host_parking_drafts');
+      if (response is! List) return const [];
       return response
           .whereType<Map>()
           .map(
@@ -23,10 +67,28 @@ class OwnerParkingRepositoryImpl implements OwnerParkingRepository {
           )
           .toList(growable: false);
     } on sb.PostgrestException catch (error) {
-      throw AuthFailure(
-        'Could not load your parking spaces.',
-        code: error.code ?? 'owned_parking_load_failed',
+      final text = [error.message, error.details, error.hint]
+          .whereType<Object>()
+          .map((value) => value.toString())
+          .join(' ')
+          .toLowerCase();
+      if (error.code == 'PGRST202' || text.contains('schema cache')) {
+        return const [];
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> deleteListing(String spotId) async {
+    _assertReady();
+    try {
+      await _client.rpc(
+        'delete_owned_parking_listing',
+        params: {'p_listing_id': spotId},
       );
+    } on sb.PostgrestException catch (error) {
+      throw _deleteListingFailure(error);
     }
   }
 
@@ -102,28 +164,99 @@ class OwnerParkingRepositoryImpl implements OwnerParkingRepository {
     _assertReady();
     _validatePricing(update);
     try {
-      final response = await _client.rpc(
-        'update_owned_parking_space_pricing',
-        params: {
-          'p_available_from_date': _dateOnly(update.availableFromDate),
-          'p_available_to_date': _dateOnly(update.availableToDate),
-          'p_daily_end_minute': update.dailyEndMinute,
-          'p_daily_start_minute': update.dailyStartMinute,
-          'p_expected_version': update.expectedVersion,
-          'p_hourly_price': update.hourlyPrice,
-          'p_slots_count': update.slotsCount,
-          'p_space_id': spotId,
-        },
+      appLogger.info('owner_pricing_repository_update_requested', {
+        ..._pricingUpdateLogPayload(spotId: spotId, update: update),
+        'path': 'new_rpc',
+      });
+      final response = await _invokePricingRpc(
+        spotId: spotId,
+        update: update,
+        includeSkipWeekends: true,
       );
+      appLogger.info('owner_pricing_repository_update_succeeded', {
+        'spotId': spotId,
+        'path': 'new_rpc',
+        'responseType': response.runtimeType.toString(),
+      });
       return _spotFromRpc(response);
     } on AppFailure {
       rethrow;
     } on sb.PostgrestException catch (error) {
+      appLogger.error('owner_pricing_repository_update_failed', {
+        ..._pricingUpdateLogPayload(spotId: spotId, update: update),
+        ..._postgrestLogPayload(error),
+        'path': 'new_rpc',
+      }, error);
+      if (isPricingSkipWeekendsRpcUnavailable(error)) {
+        try {
+          appLogger.warn('owner_pricing_repository_fallback_requested', {
+            ..._pricingUpdateLogPayload(spotId: spotId, update: update),
+            'reason': 'pricing_rpc_signature_drift',
+            'path': 'legacy_rpc',
+          });
+          final response = await _invokePricingRpc(
+            spotId: spotId,
+            update: update,
+            includeSkipWeekends: false,
+          );
+          appLogger.info('owner_pricing_repository_fallback_succeeded', {
+            'spotId': spotId,
+            'path': 'legacy_rpc',
+            'responseType': response.runtimeType.toString(),
+          });
+          return _spotFromRpc(response);
+        } on sb.PostgrestException catch (fallbackError) {
+          appLogger.error('owner_pricing_repository_fallback_failed', {
+            ..._pricingUpdateLogPayload(spotId: spotId, update: update),
+            ..._postgrestLogPayload(fallbackError),
+            'path': 'legacy_rpc',
+          }, fallbackError);
+          throw _parkingFailure(
+            fallbackError,
+            fallbackMessage: 'Could not update the pricing.',
+          );
+        }
+      }
       throw _parkingFailure(
         error,
         fallbackMessage: 'Could not update the pricing.',
       );
     }
+  }
+
+  Future<Object?> _invokePricingRpc({
+    required String spotId,
+    required OwnedListingPricingUpdate update,
+    required bool includeSkipWeekends,
+  }) {
+    final params = <String, Object?>{
+      'p_available_from_date': _dateOnly(update.availableFromDate),
+      'p_available_to_date': _dateOnly(update.availableToDate),
+      'p_daily_end_minute': update.dailyEndMinute,
+      'p_daily_start_minute': update.dailyStartMinute,
+      'p_expected_version': update.expectedVersion,
+      'p_hourly_price': update.hourlyPrice,
+      'p_slots_count': update.slotsCount,
+      'p_space_id': spotId,
+    };
+    if (includeSkipWeekends) {
+      params['p_skip_weekends'] = update.skipWeekends;
+    }
+
+    appLogger.info('owner_pricing_rpc_calling', {
+      'spotId': spotId,
+      'includeSkipWeekends': includeSkipWeekends,
+      'paramKeys': params.keys.toList(growable: false).join(','),
+      'expectedVersion': update.expectedVersion,
+      'hourlyPrice': update.hourlyPrice,
+      'slotsCount': update.slotsCount,
+      'availableFromDate': _dateOnly(update.availableFromDate),
+      'availableToDate': _dateOnly(update.availableToDate),
+      'dailyStartMinute': update.dailyStartMinute,
+      'dailyEndMinute': update.dailyEndMinute,
+      'skipWeekends': update.skipWeekends,
+    });
+    return _client.rpc('update_owned_parking_space_pricing', params: params);
   }
 
   Future<Map<String, Object?>> _invokeFunctionData(
@@ -193,6 +326,23 @@ class OwnerParkingRepositoryImpl implements OwnerParkingRepository {
     return AuthFailure(fallbackMessage, code: code);
   }
 
+  AppFailure _deleteListingFailure(sb.PostgrestException error) {
+    final code = error.code ?? 'delete_listing_failed';
+    if (code == 'P0002') {
+      return const AuthFailure(
+        'Listing was not found for this account.',
+        code: 'owned_listing_not_found',
+      );
+    }
+    if (code == '42501') {
+      return const AuthFailure(
+        'Sign in again before deleting this listing.',
+        code: 'delete_listing_unauthorized',
+      );
+    }
+    return AuthFailure('Could not delete the listing.', code: code);
+  }
+
   void _validateAddress(OwnedListingAddressUpdate update) {
     if (update.address.trim().length < 8 ||
         update.locality.trim().length < 2 ||
@@ -260,6 +410,16 @@ class OwnerParkingRepositoryImpl implements OwnerParkingRepository {
         code: 'listing_date_range_invalid',
       );
     }
+    if (!parkingRangeContainsBookableDay(
+      from,
+      to,
+      skipWeekends: update.skipWeekends,
+    )) {
+      throw const ValidationFailure(
+        'Date range must include at least one weekday.',
+        code: 'listing_date_range_has_no_bookable_days',
+      );
+    }
     if (update.dailyStartMinute < 0 ||
         update.dailyStartMinute > 1410 ||
         update.dailyEndMinute < 30 ||
@@ -278,6 +438,32 @@ class OwnerParkingRepositoryImpl implements OwnerParkingRepository {
     final month = value.month.toString().padLeft(2, '0');
     final day = value.day.toString().padLeft(2, '0');
     return '${value.year}-$month-$day';
+  }
+
+  Map<String, Object?> _pricingUpdateLogPayload({
+    required String spotId,
+    required OwnedListingPricingUpdate update,
+  }) {
+    return {
+      'spotId': spotId,
+      'expectedVersion': update.expectedVersion,
+      'hourlyPrice': update.hourlyPrice,
+      'slotsCount': update.slotsCount,
+      'availableFromDate': _dateOnly(update.availableFromDate),
+      'availableToDate': _dateOnly(update.availableToDate),
+      'dailyStartMinute': update.dailyStartMinute,
+      'dailyEndMinute': update.dailyEndMinute,
+      'skipWeekends': update.skipWeekends,
+    };
+  }
+
+  Map<String, Object?> _postgrestLogPayload(sb.PostgrestException error) {
+    return {
+      'postgrestCode': error.code,
+      'postgrestMessage': error.message,
+      'postgrestDetails': error.details?.toString(),
+      'postgrestHint': error.hint,
+    };
   }
 
   void _assertReady() {

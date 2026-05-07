@@ -118,6 +118,50 @@ void main() {
     expect(availableDates.last.day, endDate.day);
   });
 
+  test('weekend exclusion removes Saturday and Sunday from booking dates', () {
+    final today = DateTime.now();
+    var friday = DateTime(
+      today.year,
+      today.month,
+      today.day,
+    ).add(const Duration(days: 1));
+    while (friday.weekday != DateTime.friday) {
+      friday = friday.add(const Duration(days: 1));
+    }
+    final endDate = friday.add(const Duration(days: 4));
+    final spot = ParkingSpot(
+      id: 'spot-1',
+      title: 'Weekday parking',
+      address: 'Test address',
+      locality: 'Test',
+      distanceKm: 1,
+      rating: 4.8,
+      reviewCount: 10,
+      price: 80,
+      currency: 'INR',
+      cadence: BookingCadence.hourly,
+      availableFrom: DateTime(friday.year, friday.month, friday.day, 8),
+      availableUntil: DateTime(endDate.year, endDate.month, endDate.day, 22),
+      slotsAvailable: 2,
+      location: const GeoPoint(latitude: 13.08, longitude: 80.27),
+      amenities: const [ParkingAmenity.covered],
+      imageUrl: 'https://example.com/parking.jpg',
+      skipWeekends: true,
+    );
+
+    final availableDates = BookingTimeSelection.availableDatesFor(spot);
+
+    expect(availableDates, hasLength(3));
+    expect(
+      availableDates.any(
+        (date) =>
+            date.weekday == DateTime.saturday ||
+            date.weekday == DateTime.sunday,
+      ),
+      isFalse,
+    );
+  });
+
   test('all-day owner windows stay inside the advertised end month', () {
     final now = DateTime.now();
     final monthStart = DateTime(now.year, now.month, 1);

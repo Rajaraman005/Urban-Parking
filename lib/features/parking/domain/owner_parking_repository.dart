@@ -84,6 +84,7 @@ class OwnedListingPricingUpdate {
     required this.dailyStartMinute,
     required this.expectedVersion,
     required this.hourlyPrice,
+    required this.skipWeekends,
     required this.slotsCount,
   });
 
@@ -93,11 +94,36 @@ class OwnedListingPricingUpdate {
   final int dailyStartMinute;
   final int expectedVersion;
   final int hourlyPrice;
+  final bool skipWeekends;
   final int slotsCount;
+
+  OwnedListingPricingUpdate copyWith({
+    DateTime? availableFromDate,
+    DateTime? availableToDate,
+    int? dailyEndMinute,
+    int? dailyStartMinute,
+    int? expectedVersion,
+    int? hourlyPrice,
+    bool? skipWeekends,
+    int? slotsCount,
+  }) {
+    return OwnedListingPricingUpdate(
+      availableFromDate: availableFromDate ?? this.availableFromDate,
+      availableToDate: availableToDate ?? this.availableToDate,
+      dailyEndMinute: dailyEndMinute ?? this.dailyEndMinute,
+      dailyStartMinute: dailyStartMinute ?? this.dailyStartMinute,
+      expectedVersion: expectedVersion ?? this.expectedVersion,
+      hourlyPrice: hourlyPrice ?? this.hourlyPrice,
+      skipWeekends: skipWeekends ?? this.skipWeekends,
+      slotsCount: slotsCount ?? this.slotsCount,
+    );
+  }
 }
 
 abstract interface class OwnerParkingRepository {
   Future<List<ParkingSpot>> listOwnedSpaces();
+
+  Future<void> deleteListing(String spotId);
 
   Future<List<ParkingAddressCandidate>> searchAddress(String query);
 

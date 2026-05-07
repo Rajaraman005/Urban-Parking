@@ -1,40 +1,76 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:latlong2/latlong.dart';
 
 import '../../../config/app_providers.dart';
 import '../../../core/errors/app_failure.dart';
+import '../../../core/utils/app_logger.dart';
 import '../../../core/utils/geo_discovery/geo_types.dart';
 import '../../../shared/formatters.dart';
+import '../../../shared/widgets/address_search_map_picker.dart';
 import '../../../shared/widgets/app_screen.dart';
 import '../../../shared/widgets/app_toast.dart';
 import '../../../shared/widgets/state_view.dart';
+import '../../user_setup/presentation/host_setup_launcher.dart';
 import '../domain/owner_parking_repository.dart';
+import '../domain/parking_availability.dart';
 import '../domain/parking_spot.dart';
 import 'owner_parking_controller.dart';
 import 'parking_listing_store.dart';
+import 'widgets/listing_availability_editor.dart';
 
-class OwnedParkingScreen extends ConsumerWidget {
+class OwnedParkingScreen extends ConsumerStatefulWidget {
   const OwnedParkingScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OwnedParkingScreen> createState() => _OwnedParkingScreenState();
+}
+
+class _OwnedParkingScreenState extends ConsumerState<OwnedParkingScreen> {
+  final Set<String> _selectedListingIds = <String>{};
+  final Map<String, String> _selectedListingTitles = <String, String>{};
+
+  @override
+  Widget build(BuildContext context) {
     final spaces = ref.watch(ownedParkingSpacesProvider);
+    final hasSelection = _selectedListingIds.isNotEmpty;
 
     return AppScreen(
       padded: false,
       backgroundColor: const Color(0xFFF5F6F8),
       appBar: AppBar(
-        title: const Text('My parking spaces'),
+        title: const Text(
+          'My parking spaces',
+          style: TextStyle(
+            color: Color(0xFF0B0B0C),
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0,
+          ),
+        ),
         actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            onPressed: () => ref.invalidate(ownedParkingSpacesProvider),
-            icon: const Icon(Icons.refresh_rounded),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            child: hasSelection
+                ? IconButton(
+                    key: const ValueKey('delete-listing'),
+                    tooltip: 'Delete selected',
+                    onPressed: () => unawaited(_confirmDeleteListings()),
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: Color(0xFFB91C1C),
+                    ),
+                  )
+                : IconButton(
+                    key: const ValueKey('refresh-spaces'),
+                    tooltip: 'Refresh',
+                    onPressed: () => ref.invalidate(ownedParkingSpacesProvider),
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
           ),
         ],
       ),
@@ -53,11 +89,10 @@ class OwnedParkingScreen extends ConsumerWidget {
         data: (items) {
           if (items.isEmpty) {
             return StateView(
-              title: 'No active spaces yet',
-              body:
-                  'Create or activate a parking listing before editing live details.',
+              title: 'No parking spaces yet',
+              body: 'Create a parking listing before editing live details.',
               actionLabel: 'Host a space',
-              onAction: () => context.push('/setup/host-basics'),
+              onAction: () => unawaited(startHostSetup(context, ref)),
             );
           }
 
@@ -67,6 +102,8 @@ class OwnedParkingScreen extends ConsumerWidget {
             ),
           );
 
+          _clearInvalidSelection(items);
+
           return ListView.separated(
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
             itemBuilder: (context, index) {
@@ -74,7 +111,17 @@ class OwnedParkingScreen extends ConsumerWidget {
               final live =
                   ref.watch(parkingListingSnapshotProvider(seeded.id))?.spot ??
                   seeded;
-              return _OwnedParkingCard(spot: live);
+              final isDraft = live.status == 'draft';
+              final isActive = live.status == 'active';
+              final isSelectionMode = _selectedListingIds.isNotEmpty;
+              final canTap = isSelectionMode || isDraft || isActive;
+              return _OwnedParkingCard(
+                isSelected: _selectedListingIds.contains(live.id),
+                isSelectionMode: isSelectionMode,
+                onLongPress: () => _selectListing(live),
+                onTap: canTap ? () => _handleCardTap(live) : null,
+                spot: live,
+              );
             },
             separatorBuilder: (_, _) => const SizedBox(height: 16),
             itemCount: items.length,
@@ -88,80 +135,449 @@ class OwnedParkingScreen extends ConsumerWidget {
     if (error is AppFailure) return error.message;
     return 'Something went wrong. Please try again.';
   }
+
+  void _handleCardTap(ParkingSpot spot) {
+    final isDraft = spot.status == 'draft';
+    final isActive = spot.status == 'active';
+    if (_selectedListingIds.isNotEmpty) {
+      _toggleListingSelection(spot);
+      return;
+    }
+    if (isDraft) {
+      unawaited(startHostSetup(context, ref, resumeDraftId: spot.id));
+    } else if (isActive) {
+      context.push('/profile/my-spaces/${spot.id}/edit');
+    }
+  }
+
+  void _selectListing(ParkingSpot spot) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _selectedListingIds.add(spot.id);
+      _selectedListingTitles[spot.id] = spot.title;
+    });
+  }
+
+  void _toggleListingSelection(ParkingSpot spot) {
+    if (_selectedListingIds.contains(spot.id)) {
+      setState(() {
+        _selectedListingIds.remove(spot.id);
+        _selectedListingTitles.remove(spot.id);
+      });
+      return;
+    }
+    _selectListing(spot);
+  }
+
+  void _clearInvalidSelection(List<ParkingSpot> items) {
+    if (_selectedListingIds.isEmpty) return;
+    final validListingIds = {for (final spot in items) spot.id};
+    final staleIds = _selectedListingIds.difference(validListingIds);
+    if (staleIds.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _selectedListingIds.removeAll(staleIds);
+        for (final id in staleIds) {
+          _selectedListingTitles.remove(id);
+        }
+      });
+    });
+  }
+
+  Future<void> _confirmDeleteListings() async {
+    final listingIds = _selectedListingIds.toList(growable: false);
+    if (listingIds.isEmpty) return;
+    final titles = [
+      for (final id in listingIds)
+        if ((_selectedListingTitles[id] ?? '').trim().isNotEmpty)
+          _selectedListingTitles[id]!.trim(),
+    ];
+    final isSingle = listingIds.length == 1;
+    final result = await showDialog<Object?>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => _DeleteListingDialog(
+        isSingle: isSingle,
+        onDelete: () => _deleteListings(listingIds),
+        selectedCount: listingIds.length,
+        title: titles.isEmpty ? null : titles.first,
+      ),
+    );
+    if (!mounted) return;
+    if (result == true) {
+      AppToast.success(
+        context,
+        isSingle ? 'Listing deleted' : 'Listings deleted',
+      );
+      return;
+    }
+    if (result is Object) {
+      AppToast.error(context, _errorMessage(result));
+    }
+  }
+
+  Future<void> _deleteListings(List<String> listingIds) async {
+    final controller = ref.read(ownerListingEditorControllerProvider.notifier);
+    for (final listingId in listingIds) {
+      await controller.deleteListing(listingId);
+    }
+    if (!mounted) return;
+    setState(() {
+      _selectedListingIds.clear();
+      _selectedListingTitles.clear();
+    });
+  }
+}
+
+class _DeleteListingDialog extends StatefulWidget {
+  const _DeleteListingDialog({
+    required this.isSingle,
+    required this.onDelete,
+    required this.selectedCount,
+    this.title,
+  });
+
+  final bool isSingle;
+  final Future<void> Function() onDelete;
+  final int selectedCount;
+  final String? title;
+
+  @override
+  State<_DeleteListingDialog> createState() => _DeleteListingDialogState();
+}
+
+class _DeleteListingDialogState extends State<_DeleteListingDialog> {
+  bool _isDeleting = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final titleText = widget.isSingle ? 'Delete listing?' : 'Delete listings?';
+    final bodyText = widget.isSingle
+        ? widget.title == null || widget.title!.trim().isEmpty
+              ? 'This removes the selected parking space. This cannot be undone.'
+              : 'This removes "${widget.title}" from your parking spaces. This cannot be undone.'
+        : 'This removes ${widget.selectedCount} selected parking spaces. This cannot be undone.';
+    final deleteLabel = widget.isSingle ? 'Delete' : 'Delete all';
+
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+      backgroundColor: Colors.transparent,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.18),
+                blurRadius: 34,
+                offset: const Offset(0, 18),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              child: _isDeleting
+                  ? const SizedBox(
+                      key: ValueKey('delete-spinner'),
+                      height: 168,
+                      child: Center(
+                        child: SizedBox(
+                          width: 34,
+                          height: 34,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 3,
+                            color: Color(0xFFB91C1C),
+                          ),
+                        ),
+                      ),
+                    )
+                  : Column(
+                      key: const ValueKey('delete-content'),
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          titleText,
+                          style: const TextStyle(
+                            color: Color(0xFF0B0B0C),
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            height: 1.08,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          bodyText,
+                          style: const TextStyle(
+                            color: Color(0xFF52525B),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            height: 1.35,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () =>
+                                    Navigator.of(context).pop(false),
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size(0, 48),
+                                  foregroundColor: const Color(0xFF18181B),
+                                  side: const BorderSide(
+                                    color: Color(0xFFE4E4E7),
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  textStyle: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0,
+                                  ),
+                                ),
+                                child: const Text('Cancel'),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: _delete,
+                                style: FilledButton.styleFrom(
+                                  minimumSize: const Size(0, 48),
+                                  backgroundColor: const Color(0xFFB91C1C),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  textStyle: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0,
+                                  ),
+                                ),
+                                child: Text(deleteLabel),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _delete() async {
+    if (_isDeleting) return;
+    setState(() => _isDeleting = true);
+    try {
+      await widget.onDelete();
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (error) {
+      if (mounted) Navigator.of(context).pop(error);
+    }
+  }
 }
 
 class _OwnedParkingCard extends StatelessWidget {
-  const _OwnedParkingCard({required this.spot});
+  const _OwnedParkingCard({
+    required this.isSelected,
+    required this.isSelectionMode,
+    required this.onTap,
+    required this.spot,
+    this.onLongPress,
+  });
 
+  final bool isSelected;
+  final bool isSelectionMode;
+  final VoidCallback? onLongPress;
+  final VoidCallback? onTap;
   final ParkingSpot spot;
 
   @override
   Widget build(BuildContext context) {
     final address = spot.address.isEmpty ? spot.locality : spot.address;
+    final isDraft = spot.status == 'draft';
+    final isActive = spot.status == 'active';
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: [
+            BoxShadow(
+              color: (isSelected ? const Color(0xFFB91C1C) : Colors.black)
+                  .withValues(alpha: isSelected ? 0.14 : 0.06),
+              blurRadius: isSelected ? 24 : 22,
+              offset: const Offset(0, 12),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(
+              color: isSelected
+                  ? const Color(0xFFB91C1C)
+                  : Colors.black.withValues(alpha: 0.08),
+              width: isSelected ? 1.4 : 1,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onLongPress: onLongPress,
+            onTap: onTap,
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 74),
+              padding: const EdgeInsets.fromLTRB(15, 14, 10, 14),
+              child: Row(
+                children: [
+                  if (isSelectionMode) ...[
+                    _SelectedListingIndicator(isSelected: isSelected),
+                    const SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          spot.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF0B0B0C),
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            height: 1.05,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          address.isEmpty
+                              ? _statusDescription(spot.status)
+                              : address,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF71717A),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            height: 1.25,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  _ListingStatusBadge(status: spot.status),
+                  if (!isSelectionMode && (isDraft || isActive)) ...[
+                    const SizedBox(width: 8),
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      color: Color(0xFF0B0B0C),
+                      size: 26,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _statusDescription(String status) {
+    return switch (status) {
+      'draft' => 'Continue setup',
+      'pending_review' => 'Submitted for review',
+      'rejected' => 'Needs updates',
+      _ => 'Active listing',
+    };
+  }
+}
+
+class _SelectedListingIndicator extends StatelessWidget {
+  const _SelectedListingIndicator({required this.isSelected});
+
+  final bool isSelected;
+
+  @override
+  Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 22,
-            offset: const Offset(0, 12),
-          ),
-        ],
+        color: isSelected ? const Color(0xFFB91C1C) : Colors.transparent,
+        shape: BoxShape.circle,
+        border: Border.all(color: const Color(0xFFB91C1C), width: 1.6),
       ),
-      child: Material(
-        color: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: BorderSide(color: Colors.black.withValues(alpha: 0.08)),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => context.push('/profile/my-spaces/${spot.id}/edit'),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 15, 10, 15),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        spot.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF0B0B0C),
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          height: 1.05,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                      const SizedBox(height: 7),
-                      Text(
-                        address,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF71717A),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          height: 1.25,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  color: Color(0xFF0B0B0C),
-                  size: 28,
-                ),
-              ],
-            ),
+      child: SizedBox(
+        width: 24,
+        height: 24,
+        child: isSelected
+            ? const Icon(Icons.check_rounded, color: Colors.white, size: 17)
+            : null,
+      ),
+    );
+  }
+}
+
+class _ListingStatusBadge extends StatelessWidget {
+  const _ListingStatusBadge({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = switch (status) {
+      'draft' => 'Draft',
+      'pending_review' => 'Review',
+      'rejected' => 'Rejected',
+      _ => 'Active',
+    };
+    final color = switch (status) {
+      'draft' => const Color(0xFF92400E),
+      'pending_review' => const Color(0xFF1D4ED8),
+      'rejected' => const Color(0xFFB91C1C),
+      _ => const Color(0xFF047857),
+    };
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+            height: 1,
+            letterSpacing: 0,
           ),
         ),
       ),
@@ -171,11 +587,14 @@ class _OwnedParkingCard extends StatelessWidget {
 
 const _fieldTextStyle = TextStyle(
   color: Color(0xFF0B0B0C),
-  fontSize: 16,
-  fontWeight: FontWeight.w800,
+  fontSize: 15,
+  fontWeight: FontWeight.w700,
   height: 1.2,
   letterSpacing: 0,
 );
+
+const _addressAutocompleteDelay = Duration(milliseconds: 350);
+const _addressAutocompleteMinLength = 4;
 
 class OwnedParkingEditScreen extends ConsumerWidget {
   const OwnedParkingEditScreen({required this.spotId, super.key});
@@ -190,7 +609,17 @@ class OwnedParkingEditScreen extends ConsumerWidget {
     return AppScreen(
       padded: false,
       backgroundColor: const Color(0xFFF5F6F8),
-      appBar: AppBar(title: const Text('Update listing')),
+      appBar: AppBar(
+        title: const Text(
+          'Update listing',
+          style: TextStyle(
+            color: Color(0xFF0B0B0C),
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0,
+          ),
+        ),
+      ),
       child: spot.when(
         loading: () => const StateView(
           title: 'Loading listing',
@@ -217,8 +646,6 @@ class _OwnedParkingEditContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final address = _listingAddress(spot);
-    final price = formatHourlyMoney(spot.price, spot.currency);
-    final slotLabel = spot.slotsAvailable == 1 ? 'slot' : 'slots';
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
@@ -229,7 +656,7 @@ class _OwnedParkingEditContent extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: Color(0xFF0B0B0C),
-            fontSize: 26,
+            fontSize: 24,
             fontWeight: FontWeight.w900,
             height: 1.05,
             letterSpacing: 0,
@@ -242,8 +669,8 @@ class _OwnedParkingEditContent extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: Color(0xFF71717A),
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
             height: 1.25,
             letterSpacing: 0,
           ),
@@ -252,15 +679,12 @@ class _OwnedParkingEditContent extends StatelessWidget {
         _OwnerEditActionTile(
           icon: Icons.location_on_outlined,
           title: 'Address',
-          value: address,
           onTap: () => context.push('/profile/my-spaces/${spot.id}/address'),
         ),
         const SizedBox(height: 12),
         _OwnerEditActionTile(
           icon: Icons.payments_outlined,
           title: 'Pricing and availability',
-          value:
-              '$price - ${spot.slotsAvailable} $slotLabel\n${_availabilityLabel(spot)}',
           onTap: () => context.push('/profile/my-spaces/${spot.id}/pricing'),
         ),
       ],
@@ -273,13 +697,11 @@ class _OwnerEditActionTile extends StatelessWidget {
     required this.icon,
     required this.onTap,
     required this.title,
-    required this.value,
   });
 
   final IconData icon;
   final VoidCallback onTap;
   final String title;
-  final String value;
 
   @override
   Widget build(BuildContext context) {
@@ -303,8 +725,9 @@ class _OwnerEditActionTile extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 68),
+            padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
             child: Row(
               children: [
                 DecoratedBox(
@@ -313,42 +736,24 @@ class _OwnerEditActionTile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: SizedBox(
-                    width: 42,
-                    height: 42,
-                    child: Icon(icon, color: const Color(0xFF0B0B0C), size: 21),
+                    width: 40,
+                    height: 40,
+                    child: Icon(icon, color: const Color(0xFF0B0B0C), size: 20),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF0B0B0C),
-                          fontSize: 16,
-                          fontWeight: FontWeight.w900,
-                          height: 1.05,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                      const SizedBox(height: 7),
-                      Text(
-                        value,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF71717A),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          height: 1.25,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF0B0B0C),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      height: 1.05,
+                      letterSpacing: 0,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -358,406 +763,6 @@ class _OwnerEditActionTile extends StatelessWidget {
                   size: 28,
                 ),
               ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AddressSearchBar extends StatelessWidget {
-  const _AddressSearchBar({
-    required this.controller,
-    required this.enabled,
-    required this.isSearching,
-    required this.onClear,
-    required this.onSearch,
-  });
-
-  final TextEditingController controller;
-  final bool enabled;
-  final bool isSearching;
-  final VoidCallback onClear;
-  final VoidCallback onSearch;
-
-  @override
-  Widget build(BuildContext context) {
-    final canSubmit = enabled && !isSearching;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: ValueListenableBuilder<TextEditingValue>(
-        valueListenable: controller,
-        builder: (context, value, _) {
-          final hasText = value.text.isNotEmpty;
-          return SizedBox(
-            height: 52,
-            child: Row(
-              children: [
-                const SizedBox(width: 16),
-                const Icon(
-                  Icons.search_rounded,
-                  color: Color(0xFF71717A),
-                  size: 20,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    enabled: enabled,
-                    textInputAction: TextInputAction.search,
-                    onSubmitted: canSubmit && value.text.trim().isNotEmpty
-                        ? (_) => onSearch()
-                        : null,
-                    style: _fieldTextStyle.copyWith(fontSize: 15),
-                    decoration: const InputDecoration(
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      disabledBorder: InputBorder.none,
-                      errorBorder: InputBorder.none,
-                      focusedErrorBorder: InputBorder.none,
-                      filled: false,
-                      fillColor: Colors.transparent,
-                      hoverColor: Colors.transparent,
-                      hintText: 'Search address',
-                      hintStyle: TextStyle(
-                        color: Color(0xFFA1A1AA),
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0,
-                      ),
-                      isDense: true,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                ),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 120),
-                  child: hasText
-                      ? Semantics(
-                          key: const ValueKey('clear-search'),
-                          button: true,
-                          label: 'Clear search',
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: enabled ? onClear : null,
-                            child: const SizedBox(
-                              width: 42,
-                              height: 52,
-                              child: Icon(
-                                Icons.close_rounded,
-                                color: Color(0xFF71717A),
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                        )
-                      : SizedBox(
-                          key: const ValueKey('empty-search-action'),
-                          width: 10,
-                          height: 52,
-                        ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _AddressMapPreview extends StatefulWidget {
-  const _AddressMapPreview({
-    required this.fallback,
-    required this.isLocating,
-    required this.latitudeController,
-    required this.longitudeController,
-    required this.onLocationChanged,
-    required this.onUseCurrentLocation,
-  });
-
-  final GeoPoint fallback;
-  final bool isLocating;
-  final TextEditingController latitudeController;
-  final TextEditingController longitudeController;
-  final ValueChanged<GeoPoint> onLocationChanged;
-  final VoidCallback onUseCurrentLocation;
-
-  @override
-  State<_AddressMapPreview> createState() => _AddressMapPreviewState();
-}
-
-class _AddressMapPreviewState extends State<_AddressMapPreview> {
-  final _mapController = MapController();
-  late GeoPoint _cameraTarget;
-  double _zoom = 16;
-  bool _mapReady = false;
-  bool _updatingFromMap = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _cameraTarget = _controllerLocation();
-    widget.latitudeController.addListener(_syncCameraFromText);
-    widget.longitudeController.addListener(_syncCameraFromText);
-  }
-
-  @override
-  void didUpdateWidget(covariant _AddressMapPreview oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.latitudeController != widget.latitudeController) {
-      oldWidget.latitudeController.removeListener(_syncCameraFromText);
-      widget.latitudeController.addListener(_syncCameraFromText);
-    }
-    if (oldWidget.longitudeController != widget.longitudeController) {
-      oldWidget.longitudeController.removeListener(_syncCameraFromText);
-      widget.longitudeController.addListener(_syncCameraFromText);
-    }
-    _syncCameraFromText();
-  }
-
-  @override
-  void dispose() {
-    widget.latitudeController.removeListener(_syncCameraFromText);
-    widget.longitudeController.removeListener(_syncCameraFromText);
-    _mapController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 22,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: SizedBox(
-          height: 230,
-          child: Stack(
-            children: [
-              FlutterMap(
-                mapController: _mapController,
-                options: MapOptions(
-                  initialCenter: _latLng(_cameraTarget),
-                  initialZoom: 16,
-                  maxZoom: 19,
-                  minZoom: 4,
-                  onMapReady: () {
-                    _mapReady = true;
-                  },
-                  onMapEvent: (event) {
-                    if (event is MapEventMoveEnd) {
-                      _cameraTarget = _geoPoint(event.camera.center);
-                      _commitCameraTarget();
-                    }
-                  },
-                  onPositionChanged: (camera, _) {
-                    _cameraTarget = _geoPoint(camera.center);
-                    _zoom = camera.zoom;
-                  },
-                  interactionOptions: const InteractionOptions(
-                    flags:
-                        InteractiveFlag.drag |
-                        InteractiveFlag.pinchMove |
-                        InteractiveFlag.pinchZoom |
-                        InteractiveFlag.doubleTapZoom |
-                        InteractiveFlag.flingAnimation,
-                  ),
-                  keepAlive: true,
-                  backgroundColor: const Color(0xFFEDEFF3),
-                ),
-                children: [
-                  TileLayer(
-                    urlTemplate:
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.urbanparking.india',
-                    maxZoom: 19,
-                  ),
-                ],
-              ),
-              const IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color(0x08000000),
-                        Colors.transparent,
-                        Color(0x12000000),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const Center(child: _FloatingMapPin()),
-              const Positioned(
-                left: 10,
-                bottom: 10,
-                child: _OsmAttributionPill(),
-              ),
-              Positioned(
-                right: 12,
-                bottom: 12,
-                child: _MapGpsControl(
-                  isLoading: widget.isLocating,
-                  onTap: widget.onUseCurrentLocation,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  GeoPoint _controllerLocation() => _mapLocationFrom(
-    fallback: widget.fallback,
-    latitudeText: widget.latitudeController.text,
-    longitudeText: widget.longitudeController.text,
-  );
-
-  void _syncCameraFromText() {
-    if (_updatingFromMap) return;
-    final next = _controllerLocation();
-    if (!_hasMeaningfullyMoved(next, _cameraTarget)) return;
-    _cameraTarget = next;
-    if (mounted) setState(() {});
-    if (_mapReady) {
-      _mapController.move(_latLng(next), _zoom);
-    }
-  }
-
-  void _commitCameraTarget() {
-    _updatingFromMap = true;
-    widget.onLocationChanged(_cameraTarget);
-    _updatingFromMap = false;
-  }
-
-  bool _hasMeaningfullyMoved(GeoPoint next, GeoPoint current) {
-    return (next.latitude - current.latitude).abs() > 0.000001 ||
-        (next.longitude - current.longitude).abs() > 0.000001;
-  }
-
-  GeoPoint _geoPoint(LatLng point) {
-    return GeoPoint(latitude: point.latitude, longitude: point.longitude);
-  }
-
-  LatLng _latLng(GeoPoint point) => LatLng(point.latitude, point.longitude);
-}
-
-class _OsmAttributionPill extends StatelessWidget {
-  const _OsmAttributionPill();
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
-      ),
-      child: const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Text(
-          'OpenStreetMap',
-          style: TextStyle(
-            color: Color(0xFF111827),
-            fontSize: 10,
-            fontWeight: FontWeight.w800,
-            height: 1,
-            letterSpacing: 0,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _FloatingMapPin extends StatelessWidget {
-  const _FloatingMapPin();
-
-  @override
-  Widget build(BuildContext context) {
-    return Transform.translate(
-      offset: const Offset(0, -15),
-      child: Icon(
-        Icons.location_on_rounded,
-        color: Colors.black,
-        size: 40,
-        shadows: [
-          Shadow(
-            color: Colors.black.withValues(alpha: 0.22),
-            blurRadius: 16,
-            offset: const Offset(0, 7),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MapGpsControl extends StatelessWidget {
-  const _MapGpsControl({required this.isLoading, required this.onTap});
-
-  final bool isLoading;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Use current location',
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.18),
-              blurRadius: 16,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          shape: const CircleBorder(),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: isLoading ? null : onTap,
-            customBorder: const CircleBorder(),
-            child: SizedBox(
-              width: 44,
-              height: 44,
-              child: Center(
-                child: isLoading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          color: Color(0xFF0B0B0C),
-                          strokeWidth: 2.2,
-                        ),
-                      )
-                    : const Icon(
-                        Icons.my_location_rounded,
-                        color: Color(0xFF0B0B0C),
-                        size: 21,
-                      ),
-              ),
             ),
           ),
         ),
@@ -818,12 +823,15 @@ class _EditListingAddressScreenState
   String _provider = 'manual';
   double _confidence = 1;
   int? _seededVersion;
+  Timer? _addressSearchDebounce;
+  int _addressSearchToken = 0;
   bool _locating = false;
   bool _searching = false;
   bool _syncingCoordinates = false;
 
   @override
   void dispose() {
+    _addressSearchDebounce?.cancel();
     _searchController.dispose();
     _addressController.dispose();
     _cityController.dispose();
@@ -869,28 +877,24 @@ class _EditListingAddressScreenState
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 104),
             children: [
-              _AddressSearchBar(
-                controller: _searchController,
-                enabled: !saving && !_searching,
-                isSearching: _searching,
-                onClear: _clearSearch,
-                onSearch: _searchAddress,
-              ),
-              if (_candidates.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                _AddressSearchResultsPanel(
-                  candidates: _candidates,
-                  onSelect: saving ? null : _applyCandidate,
-                ),
-              ],
-              const SizedBox(height: 12),
-              _AddressMapPreview(
-                fallback: spot.location,
+              AddressSearchMapPicker<ParkingAddressCandidate>(
+                enabled: !saving,
+                fallbackLocation: spot.location,
                 isLocating: _locating,
-                latitudeController: _latitudeController,
-                longitudeController: _longitudeController,
+                isSearching: _searching,
+                location: _coordinatesFromHiddenControllers(),
+                onClearSearch: _clearSearch,
                 onLocationChanged: _applyMapLocation,
+                onSearch: _searchAddress,
+                onSearchChanged: _handleSearchQueryChanged,
+                onSuggestionSelected: saving ? null : _applyCandidate,
                 onUseCurrentLocation: _useCurrentLocation,
+                searchController: _searchController,
+                searchLabel: 'Search address',
+                showSuggestionsAboveMap: true,
+                suggestionSubtitleBuilder: (candidate) => candidate.address,
+                suggestionTitleBuilder: _candidateTitle,
+                suggestions: _candidates,
               ),
               const SizedBox(height: 16),
               _AddressFormPanel(
@@ -1001,31 +1005,72 @@ class _EditListingAddressScreenState
     _placeId = spot.addressPlaceId;
   }
 
-  Future<void> _searchAddress() async {
-    if (_searchController.text.trim().isEmpty) return;
+  void _handleSearchQueryChanged(String value) {
+    _addressSearchDebounce?.cancel();
+    _addressSearchToken += 1;
+    if (_candidates.isNotEmpty || _searching) {
+      setState(() {
+        _candidates = const [];
+        _searching = false;
+      });
+    }
+
+    final query = value.trim();
+    if (query.length < _addressAutocompleteMinLength) {
+      return;
+    }
+
+    final token = _addressSearchToken;
+    _addressSearchDebounce = Timer(_addressAutocompleteDelay, () {
+      unawaited(
+        _searchAddress(query: query, isAutocomplete: true, token: token),
+      );
+    });
+  }
+
+  Future<void> _searchAddress({
+    String? query,
+    bool isAutocomplete = false,
+    int? token,
+  }) async {
+    if (!isAutocomplete) _addressSearchDebounce?.cancel();
+    final effectiveQuery = (query ?? _searchController.text).trim();
+    if (effectiveQuery.length < _addressAutocompleteMinLength) return;
+    final searchToken = token ?? ++_addressSearchToken;
+
+    if (!isAutocomplete) FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _searching = true);
     try {
       final results = await ref
           .read(ownerListingEditorControllerProvider.notifier)
-          .searchAddress(_searchController.text);
-      if (mounted) {
-        setState(() => _candidates = results);
-      }
+          .searchAddress(effectiveQuery);
+      if (!mounted || searchToken != _addressSearchToken) return;
+      setState(() => _candidates = results);
     } catch (error) {
-      if (mounted) _showToast(_errorMessage(error), AppToastVariant.error);
+      if (!mounted || searchToken != _addressSearchToken) return;
+      if (isAutocomplete) {
+        setState(() => _candidates = const []);
+      } else {
+        _showToast(_errorMessage(error), AppToastVariant.error);
+      }
     } finally {
-      if (mounted) setState(() => _searching = false);
+      if (mounted && searchToken == _addressSearchToken) {
+        setState(() => _searching = false);
+      }
     }
   }
 
   void _clearSearch() {
+    _cancelAddressAutocomplete();
     setState(() {
       _searchController.clear();
       _candidates = const [];
+      _searching = false;
     });
   }
 
   void _clearAddressFields() {
+    _cancelAddressAutocomplete();
     _addressController.clear();
     _stateController.clear();
     _cityController.clear();
@@ -1074,6 +1119,7 @@ class _EditListingAddressScreenState
         _longitudeController.text == longitude) {
       return;
     }
+    _cancelAddressAutocomplete();
     setState(() {
       _setCoordinateControllers(location);
       _clearAddressFields();
@@ -1086,6 +1132,7 @@ class _EditListingAddressScreenState
 
   Future<void> _useCurrentLocation() async {
     if (_locating) return;
+    _cancelAddressAutocomplete();
     setState(() => _locating = true);
     try {
       final result = await ref.read(locationServiceProvider).currentLocation();
@@ -1118,6 +1165,7 @@ class _EditListingAddressScreenState
   }
 
   void _applyCandidate(ParkingAddressCandidate candidate) {
+    _cancelAddressAutocomplete();
     setState(() {
       _addressController.text = candidate.address;
       _stateController.text = candidate.state?.trim().isNotEmpty == true
@@ -1132,7 +1180,13 @@ class _EditListingAddressScreenState
       _confidence = candidate.confidence;
       _placeId = candidate.placeId;
       _rawAddress = candidate.raw;
+      _candidates = const [];
     });
+  }
+
+  void _cancelAddressAutocomplete() {
+    _addressSearchDebounce?.cancel();
+    _addressSearchToken += 1;
   }
 
   Future<void> _save(ParkingSpot spot) async {
@@ -1217,6 +1271,7 @@ class _EditListingPricingScreenState
   DateTime? _toDate;
   int _startMinute = 8 * 60;
   int _endMinute = 20 * 60;
+  bool _skipWeekends = false;
   int? _seededVersion;
 
   @override
@@ -1235,7 +1290,17 @@ class _EditListingPricingScreenState
     return AppScreen(
       padded: false,
       backgroundColor: const Color(0xFFF5F6F8),
-      appBar: AppBar(title: const Text('Edit pricing')),
+      appBar: AppBar(
+        title: const Text(
+          'Edit pricing',
+          style: TextStyle(
+            color: Color(0xFF0B0B0C),
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0,
+          ),
+        ),
+      ),
       child: spot.when(
         loading: () => const StateView(
           title: 'Loading listing',
@@ -1283,70 +1348,45 @@ class _EditListingPricingScreenState
               const SizedBox(height: 14),
               _EditorSection(
                 title: 'Availability',
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _DateTile(
-                            label: 'From date',
-                            value: _fromDate,
-                            onTap: saving
-                                ? null
-                                : () => _pickDate(isStart: true),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _DateTile(
-                            label: 'To date',
-                            value: _toDate,
-                            onTap: saving
-                                ? null
-                                : () => _pickDate(isStart: false),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _TimeTile(
-                            label: 'Daily start',
-                            value: _startMinute,
-                            onTap: saving
-                                ? null
-                                : () => _pickMinute(isStart: true),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _TimeTile(
-                            label: 'Daily end',
-                            value: _endMinute,
-                            onTap: saving
-                                ? null
-                                : () => _pickMinute(isStart: false),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                child: ListingAvailabilityEditor(
+                  enabled: !saving,
+                  value: ListingAvailabilityValue(
+                    dailyEndMinute: _endMinute,
+                    dailyStartMinute: _startMinute,
+                    fromDate: _fromDate,
+                    skipWeekends: _skipWeekends,
+                    toDate: _toDate,
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      _endMinute = value.dailyEndMinute;
+                      _fromDate = value.fromDate;
+                      _skipWeekends = value.skipWeekends;
+                      _startMinute = value.dailyStartMinute;
+                      _toDate = value.toDate;
+                    });
+                  },
                 ),
-              ),
-              const SizedBox(height: 14),
-              _AvailabilityPreview(
-                text:
-                    '${_dateRangeLabel(_fromDate, _toDate)} - '
-                    '${_minuteLabel(_startMinute)} to ${_minuteLabel(_endMinute)}',
               ),
               const SizedBox(height: 22),
               SizedBox(
                 height: 56,
-                child: FilledButton.icon(
+                child: FilledButton(
                   onPressed: saving ? null : () => _save(spot),
-                  icon: saving
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF0B0B0C),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: const Color(0xFF3F3F46),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                  child: saving
                       ? const SizedBox(
                           width: 18,
                           height: 18,
@@ -1355,14 +1395,11 @@ class _EditListingPricingScreenState
                             strokeWidth: 2.2,
                           ),
                         )
-                      : const Icon(Icons.check_rounded),
-                  label: Text(
-                    saving ? 'Saving' : 'Save pricing',
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
+                      : const Text(
+                          'Save pricing',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                 ),
               ),
             ],
@@ -1391,73 +1428,14 @@ class _EditListingPricingScreenState
           spot.availableUntil.month,
           spot.availableUntil.day,
         );
-    _startMinute = _normalizeStartMinute(
-      spot.dailyStartMinute ?? _minuteOfDay(spot.availableFrom),
+    _skipWeekends = spot.skipWeekends;
+    _startMinute = normalizeParkingStartMinute(
+      spot.dailyStartMinute ?? parkingMinuteOfDay(spot.availableFrom),
     );
-    _endMinute = _normalizeEndMinute(
-      spot.dailyEndMinute ?? _minuteOfDay(spot.availableUntil),
+    _endMinute = normalizeParkingEndMinute(
+      spot.dailyEndMinute ?? parkingMinuteOfDay(spot.availableUntil),
       startMinute: _startMinute,
     );
-  }
-
-  Future<void> _pickDate({required bool isStart}) async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final initial = isStart ? _fromDate : _toDate;
-    final firstAllowed = isStart
-        ? today
-        : _fromDate == null || _fromDate!.isBefore(today)
-        ? today
-        : _fromDate!;
-    final initialDate = initial == null || initial.isBefore(firstAllowed)
-        ? firstAllowed
-        : initial;
-    final picked = await showDatePicker(
-      context: context,
-      firstDate: firstAllowed,
-      initialDate: initialDate,
-      lastDate: DateTime(now.year + 2),
-    );
-    if (picked == null) return;
-    setState(() {
-      if (isStart) {
-        _fromDate = picked;
-        if (_toDate == null || _toDate!.isBefore(picked)) {
-          _toDate = picked;
-        }
-      } else {
-        _toDate = picked;
-      }
-    });
-  }
-
-  Future<void> _pickMinute({required bool isStart}) async {
-    final minMinute = isStart ? 0 : _startMinute + 30;
-    final maxMinute = isStart ? 1410 : 1440;
-    final current = isStart
-        ? _startMinute
-        : _normalizeEndMinute(_endMinute, startMinute: _startMinute);
-    final picked = await showModalBottomSheet<int>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _MinutePickerSheet(
-        currentValue: current,
-        label: isStart ? 'Daily start' : 'Daily end',
-        maxMinute: maxMinute,
-        minMinute: minMinute,
-      ),
-    );
-    if (picked == null) return;
-    setState(() {
-      if (isStart) {
-        _startMinute = _normalizeStartMinute(picked);
-        if (_endMinute <= _startMinute) {
-          _endMinute = (_startMinute + 30).clamp(30, 1440).toInt();
-        }
-      } else {
-        _endMinute = _normalizeEndMinute(picked, startMinute: _startMinute);
-      }
-    });
   }
 
   Future<void> _save(ParkingSpot spot) async {
@@ -1465,28 +1443,75 @@ class _EditListingPricingScreenState
     final slots = int.tryParse(_slotsController.text.trim());
     final fromDate = _fromDate;
     final toDate = _toDate;
+    final savePayload = _pricingSaveLogPayload(
+      spot: spot,
+      price: price,
+      priceText: _priceController.text,
+      slots: slots,
+      slotsText: _slotsController.text,
+      fromDate: fromDate,
+      toDate: toDate,
+      dailyStartMinute: _startMinute,
+      dailyEndMinute: _endMinute,
+      skipWeekends: _skipWeekends,
+    );
+    appLogger.info('owner_pricing_save_tapped', savePayload);
+
     if (price == null || slots == null || fromDate == null || toDate == null) {
+      appLogger.warn('owner_pricing_save_validation_failed', {
+        ...savePayload,
+        'reason': 'missing_or_invalid_fields',
+      });
       _showToast('Complete pricing fields', AppToastVariant.error);
       return;
     }
     if (price < 10 || price > 10000) {
+      appLogger.warn('owner_pricing_save_validation_failed', {
+        ...savePayload,
+        'reason': 'price_out_of_range',
+      });
       _showToast('Check hourly price', AppToastVariant.error);
       return;
     }
     if (slots < 1 || slots > 50) {
+      appLogger.warn('owner_pricing_save_validation_failed', {
+        ...savePayload,
+        'reason': 'slots_out_of_range',
+      });
       _showToast('Check slot count', AppToastVariant.error);
       return;
     }
     if (toDate.isBefore(fromDate)) {
+      appLogger.warn('owner_pricing_save_validation_failed', {
+        ...savePayload,
+        'reason': 'date_range_invalid',
+      });
       _showToast('Check date range', AppToastVariant.error);
       return;
     }
+    if (!parkingRangeContainsBookableDay(
+      fromDate,
+      toDate,
+      skipWeekends: _skipWeekends,
+    )) {
+      appLogger.warn('owner_pricing_save_validation_failed', {
+        ...savePayload,
+        'reason': 'no_bookable_weekday',
+      });
+      _showToast('Choose at least one weekday', AppToastVariant.error);
+      return;
+    }
     if (_endMinute <= _startMinute) {
+      appLogger.warn('owner_pricing_save_validation_failed', {
+        ...savePayload,
+        'reason': 'daily_hours_invalid',
+      });
       _showToast('Check daily hours', AppToastVariant.error);
       return;
     }
 
     try {
+      appLogger.info('owner_pricing_save_submitting', savePayload);
       await ref
           .read(ownerListingEditorControllerProvider.notifier)
           .updatePricing(
@@ -1498,11 +1523,17 @@ class _EditListingPricingScreenState
               dailyStartMinute: _startMinute,
               expectedVersion: spot.version,
               hourlyPrice: price,
+              skipWeekends: _skipWeekends,
               slotsCount: slots,
             ),
           );
+      appLogger.info('owner_pricing_save_succeeded', savePayload);
       if (mounted) _showToast('Pricing saved', AppToastVariant.success);
     } catch (error) {
+      appLogger.error('owner_pricing_save_failed', {
+        ...savePayload,
+        ..._pricingFailureLogPayload(error),
+      }, error);
       if (mounted) _showToast(_errorMessage(error), AppToastVariant.error);
     }
   }
@@ -1529,6 +1560,7 @@ class _PricingSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final slotLabel = slots == 1 ? 'slot' : 'slots';
+    final scheduleText = window.replaceFirst(', ', '\n');
     return DecoratedBox(
       decoration: BoxDecoration(
         color: const Color(0xFF0B0B0C),
@@ -1542,7 +1574,7 @@ class _PricingSummaryCard extends StatelessWidget {
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1550,12 +1582,12 @@ class _PricingSummaryCard extends StatelessWidget {
               'Live pricing',
               style: TextStyle(
                 color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
                 height: 1,
               ),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
@@ -1570,25 +1602,29 @@ class _PricingSummaryCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 13),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(
-                  Icons.schedule_rounded,
-                  color: Color(0xFFE4E4E7),
-                  size: 18,
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Icon(
+                    Icons.schedule_rounded,
+                    color: Colors.white.withValues(alpha: 0.74),
+                    size: 16,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    window,
+                    scheduleText,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Color(0xFFE4E4E7),
                       fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      height: 1.25,
+                      fontWeight: FontWeight.w700,
+                      height: 1.32,
                     ),
                   ),
                 ),
@@ -1612,11 +1648,11 @@ class _SummaryMetric extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(11),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1627,19 +1663,19 @@ class _SummaryMetric extends StatelessWidget {
               style: const TextStyle(
                 color: Color(0xFFA1A1AA),
                 fontSize: 11,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w700,
                 height: 1,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 7),
             Text(
               value,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
                 height: 1,
               ),
             ),
@@ -1674,156 +1710,13 @@ class _EditorSection extends StatelessWidget {
               style: const TextStyle(
                 color: Color(0xFF0B0B0C),
                 fontSize: 15,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
                 height: 1,
               ),
             ),
             const SizedBox(height: 14),
             child,
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AvailabilityPreview extends StatelessWidget {
-  const _AvailabilityPreview({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: const Color(0xFFEFFDF7),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFB7EAD4)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.published_with_changes_rounded,
-              color: Color(0xFF047857),
-              size: 18,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                text,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Color(0xFF065F46),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
-                  height: 1.2,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AddressSearchResultsPanel extends StatelessWidget {
-  const _AddressSearchResultsPanel({
-    required this.candidates,
-    required this.onSelect,
-  });
-
-  final List<ParkingAddressCandidate> candidates;
-  final ValueChanged<ParkingAddressCandidate>? onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          children: [
-            for (var index = 0; index < candidates.length; index++) ...[
-              _AddressCandidateRow(
-                candidate: candidates[index],
-                onTap: onSelect == null
-                    ? null
-                    : () => onSelect!(candidates[index]),
-              ),
-              if (index != candidates.length - 1)
-                Divider(
-                  height: 1,
-                  indent: 48,
-                  endIndent: 14,
-                  color: Colors.black.withValues(alpha: 0.06),
-                ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AddressCandidateRow extends StatelessWidget {
-  const _AddressCandidateRow({required this.candidate, required this.onTap});
-
-  final ParkingAddressCandidate candidate;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.location_on_outlined,
-                color: Color(0xFF0B0B0C),
-                size: 18,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  _candidateTitle(candidate),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF0B0B0C),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w900,
-                    height: 1.15,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Icon(
-                Icons.north_west_rounded,
-                color: Color(0xFFA1A1AA),
-                size: 16,
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -1891,6 +1784,7 @@ class _TextInput extends StatelessWidget {
           enabled: enabled,
           inputFormatters: spec.inputFormatters,
           keyboardType: spec.keyboardType,
+          onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
           style: _fieldTextStyle,
           decoration: InputDecoration(
             filled: true,
@@ -1898,13 +1792,13 @@ class _TextInput extends StatelessWidget {
             hintText: spec.hint,
             hintStyle: const TextStyle(
               color: Color(0xFFA1A1AA),
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
               letterSpacing: 0,
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 14,
-              vertical: 15,
+              vertical: 14,
             ),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
             enabledBorder: OutlineInputBorder(
@@ -1932,238 +1826,8 @@ class _Label extends StatelessWidget {
       style: const TextStyle(
         color: Color(0xFF0B0B0C),
         fontSize: 12,
-        fontWeight: FontWeight.w900,
+        fontWeight: FontWeight.w800,
         height: 1,
-      ),
-    );
-  }
-}
-
-class _DateTile extends StatelessWidget {
-  const _DateTile({
-    required this.label,
-    required this.onTap,
-    required this.value,
-  });
-
-  final String label;
-  final VoidCallback? onTap;
-  final DateTime? value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: Color(0xFFE4E4E7)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _Label(label),
-              const SizedBox(height: 8),
-              Text(
-                value == null
-                    ? 'Choose date'
-                    : DateFormat('d MMM yyyy').format(value!),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Color(0xFF0B0B0C),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  height: 1,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TimeTile extends StatelessWidget {
-  const _TimeTile({
-    required this.label,
-    required this.onTap,
-    required this.value,
-  });
-
-  final String label;
-  final VoidCallback? onTap;
-  final int value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: Color(0xFFE4E4E7)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _Label(label),
-                    const SizedBox(height: 8),
-                    Text(
-                      _minuteLabel(value),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF0B0B0C),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                        height: 1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.keyboard_arrow_down_rounded,
-                color: Color(0xFF71717A),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MinutePickerSheet extends StatelessWidget {
-  const _MinutePickerSheet({
-    required this.currentValue,
-    required this.label,
-    required this.maxMinute,
-    required this.minMinute,
-  });
-
-  final int currentValue;
-  final String label;
-  final int maxMinute;
-  final int minMinute;
-
-  @override
-  Widget build(BuildContext context) {
-    final options = [
-      for (var minute = minMinute; minute <= maxMinute; minute += 30) minute,
-    ];
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-        child: DecoratedBox(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-          ),
-          child: SizedBox(
-            height: MediaQuery.sizeOf(context).height * 0.58,
-            child: Column(
-              children: [
-                const SizedBox(height: 10),
-                Container(
-                  width: 42,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE4E4E7),
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          label,
-                          style: const TextStyle(
-                            color: Color(0xFF0B0B0C),
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                            height: 1,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'Close',
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-                    itemCount: options.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 6),
-                    itemBuilder: (context, index) {
-                      final value = options[index];
-                      final selected = value == currentValue;
-                      return Material(
-                        color: selected
-                            ? const Color(0xFF0B0B0C)
-                            : const Color(0xFFF7F7F9),
-                        borderRadius: BorderRadius.circular(14),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(14),
-                          onTap: () => Navigator.of(context).pop(value),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 13,
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    _minuteLabel(value),
-                                    style: TextStyle(
-                                      color: selected
-                                          ? Colors.white
-                                          : const Color(0xFF0B0B0C),
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w900,
-                                      height: 1,
-                                    ),
-                                  ),
-                                ),
-                                if (selected)
-                                  const Icon(
-                                    Icons.check_rounded,
-                                    color: Colors.white,
-                                    size: 19,
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -2172,6 +1836,55 @@ class _MinutePickerSheet extends StatelessWidget {
 String _errorMessage(Object error) {
   if (error is AppFailure) return error.message;
   return 'Something went wrong. Please try again.';
+}
+
+Map<String, Object?> _pricingSaveLogPayload({
+  required ParkingSpot spot,
+  required int? price,
+  required String priceText,
+  required int? slots,
+  required String slotsText,
+  required DateTime? fromDate,
+  required DateTime? toDate,
+  required int dailyStartMinute,
+  required int dailyEndMinute,
+  required bool skipWeekends,
+}) {
+  return {
+    'spotId': spot.id,
+    'spotVersion': spot.version,
+    'spotRevision': spot.listingRevision,
+    'parsedHourlyPrice': price,
+    'rawHourlyPrice': priceText.trim(),
+    'parsedSlotsCount': slots,
+    'rawSlotsCount': slotsText.trim(),
+    'availableFromDate': fromDate == null ? null : _dateOnlyForLog(fromDate),
+    'availableToDate': toDate == null ? null : _dateOnlyForLog(toDate),
+    'dailyStartMinute': dailyStartMinute,
+    'dailyEndMinute': dailyEndMinute,
+    'skipWeekends': skipWeekends,
+  };
+}
+
+Map<String, Object?> _pricingFailureLogPayload(Object error) {
+  if (error is AppFailure) {
+    return {
+      'failureCode': error.code,
+      'failureMessage': error.message,
+      'failureType': error.runtimeType.toString(),
+    };
+  }
+  return {
+    'failureCode': null,
+    'failureMessage': error.toString(),
+    'failureType': error.runtimeType.toString(),
+  };
+}
+
+String _dateOnlyForLog(DateTime value) {
+  final month = value.month.toString().padLeft(2, '0');
+  final day = value.day.toString().padLeft(2, '0');
+  return '${value.year}-$month-$day';
 }
 
 String _listingAddress(ParkingSpot spot) {
@@ -2185,51 +1898,22 @@ String _listingAddress(ParkingSpot spot) {
 String _availabilityLabel(ParkingSpot spot) {
   final dateFormat = DateFormat('d MMM yyyy');
   final startDate = dateFormat.format(
-    spot.availableFromDate ?? _dateOnly(spot.availableFrom),
+    spot.availableFromDate ?? parkingDateOnly(spot.availableFrom),
   );
   final endDate = dateFormat.format(
-    spot.availableToDate ?? _dateOnly(spot.availableUntil),
+    spot.availableToDate ?? parkingDateOnly(spot.availableUntil),
   );
-  final startMinute = _normalizeStartMinute(
-    spot.dailyStartMinute ?? _minuteOfDay(spot.availableFrom),
+  final startMinute = normalizeParkingStartMinute(
+    spot.dailyStartMinute ?? parkingMinuteOfDay(spot.availableFrom),
   );
-  final endMinute = _normalizeEndMinute(
-    spot.dailyEndMinute ?? _minuteOfDay(spot.availableUntil),
+  final endMinute = normalizeParkingEndMinute(
+    spot.dailyEndMinute ?? parkingMinuteOfDay(spot.availableUntil),
     startMinute: startMinute,
   );
-  final startTime = _minuteLabel(startMinute);
-  final endTime = _minuteLabel(endMinute);
-  return '$startDate to $endDate, $startTime-$endTime';
-}
-
-String _dateRangeLabel(DateTime? fromDate, DateTime? toDate) {
-  if (fromDate == null || toDate == null) return 'Choose dates';
-  final dateFormat = DateFormat('d MMM yyyy');
-  return '${dateFormat.format(fromDate)} to ${dateFormat.format(toDate)}';
-}
-
-DateTime _dateOnly(DateTime value) =>
-    DateTime(value.year, value.month, value.day);
-
-int _minuteOfDay(DateTime value) => value.hour * 60 + value.minute;
-
-int _normalizeStartMinute(int minute) {
-  final rounded = (minute ~/ 30) * 30;
-  return rounded.clamp(0, 1410).toInt();
-}
-
-int _normalizeEndMinute(int minute, {required int startMinute}) {
-  final rounded = ((minute + 29) ~/ 30) * 30;
-  final clamped = rounded.clamp(30, 1440).toInt();
-  if (clamped > startMinute) return clamped;
-  return (startMinute + 30).clamp(30, 1440).toInt();
-}
-
-String _minuteLabel(int minute) {
-  if (minute >= 24 * 60) return '12:00 AM';
-  final safeMinute = minute.clamp(0, 1410).toInt();
-  final date = DateTime(2026, 1, 1, safeMinute ~/ 60, safeMinute % 60);
-  return DateFormat('h:mm a').format(date);
+  final startTime = parkingMinuteLabel(startMinute);
+  final endTime = parkingMinuteLabel(endMinute);
+  final weekendLabel = spot.skipWeekends ? ', Except Sat/Sun' : '';
+  return '$startDate to $endDate, $startTime - $endTime$weekendLabel';
 }
 
 String _candidateTitle(ParkingAddressCandidate candidate) {
@@ -2312,18 +1996,4 @@ GeoPoint? _coordinatesFromText(String value) {
 String _coordinateText(GeoPoint location) {
   return '${location.latitude.toStringAsFixed(6)}, '
       '${location.longitude.toStringAsFixed(6)}';
-}
-
-GeoPoint _mapLocationFrom({
-  required GeoPoint fallback,
-  required String latitudeText,
-  required String longitudeText,
-}) {
-  final latitude = double.tryParse(latitudeText.trim());
-  final longitude = double.tryParse(longitudeText.trim());
-  if (latitude == null || longitude == null) return fallback;
-  if (latitude < -85 || latitude > 85 || longitude < -180 || longitude > 180) {
-    return fallback;
-  }
-  return GeoPoint(latitude: latitude, longitude: longitude);
 }

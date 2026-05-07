@@ -11,6 +11,7 @@ class AppScreen extends StatelessWidget {
     this.safeAreaBackgroundColor,
     this.safeAreaTop = true,
     this.safeAreaBottom = true,
+    this.resizeToAvoidBottomInset,
   });
 
   final Widget child;
@@ -21,6 +22,7 @@ class AppScreen extends StatelessWidget {
   final Color? safeAreaBackgroundColor;
   final bool safeAreaTop;
   final bool safeAreaBottom;
+  final bool? resizeToAvoidBottomInset;
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +52,7 @@ class AppScreen extends StatelessWidget {
       backgroundColor: backgroundColor,
       appBar: appBar,
       bottomNavigationBar: bottomNavigationBar,
+      resizeToAvoidBottomInset: resizeToAvoidBottomInset,
       body: body,
     );
   }

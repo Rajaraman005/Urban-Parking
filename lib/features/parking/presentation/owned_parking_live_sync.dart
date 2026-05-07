@@ -8,6 +8,8 @@ import '../../../config/app_providers.dart';
 import '../../../core/utils/app_logger.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../home/presentation/home_nearby_controller.dart';
+import '../../user_setup/presentation/user_setup_controller.dart';
+import 'owner_parking_controller.dart';
 
 final ownedParkingLiveSyncProvider = Provider<void>((ref) {
   final userId = ref.watch(_ownedParkingLiveUserIdProvider);
@@ -16,18 +18,30 @@ final ownedParkingLiveSyncProvider = Provider<void>((ref) {
   }
 
   final client = sb.Supabase.instance.client;
-  Timer? debounce;
+  Timer? discoveryDebounce;
+  Timer? ownedDebounce;
 
   void queueNearbyRefresh() {
-    debounce?.cancel();
-    debounce = Timer(const Duration(milliseconds: 350), () {
+    discoveryDebounce?.cancel();
+    discoveryDebounce = Timer(const Duration(milliseconds: 350), () {
       unawaited(ref.read(geoDiscoveryCacheProvider).clear());
+      ref.invalidate(ownedParkingSpacesProvider);
+      ref.invalidate(userSetupControllerProvider);
       ref.invalidate(homeNearbyControllerProvider);
     });
   }
 
-  final channel = client
-      .channel('owned-parking-live:$userId')
+  void queueOwnedRefresh() {
+    ownedDebounce?.cancel();
+    ownedDebounce = Timer(const Duration(milliseconds: 250), () {
+      ref.invalidate(ownedParkingSpacesProvider);
+      ref.invalidate(userSetupControllerProvider);
+    });
+  }
+
+  final channel = client.channel('owned-parking-live:$userId');
+
+  channel
       .onPostgresChanges(
         event: sb.PostgresChangeEvent.all,
         schema: 'public',
@@ -38,6 +52,28 @@ final ownedParkingLiveSyncProvider = Provider<void>((ref) {
           value: userId,
         ),
         callback: (_) => queueNearbyRefresh(),
+      )
+      .onPostgresChanges(
+        event: sb.PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'parking_spaces',
+        filter: sb.PostgresChangeFilter(
+          type: sb.PostgresChangeFilterType.eq,
+          column: 'host_id',
+          value: userId,
+        ),
+        callback: (_) => queueOwnedRefresh(),
+      )
+      .onPostgresChanges(
+        event: sb.PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'parking_listing_drafts',
+        filter: sb.PostgresChangeFilter(
+          type: sb.PostgresChangeFilterType.eq,
+          column: 'host_id',
+          value: userId,
+        ),
+        callback: (_) => queueOwnedRefresh(),
       )
       .subscribe((status, error) {
         switch (status) {
@@ -55,7 +91,8 @@ final ownedParkingLiveSyncProvider = Provider<void>((ref) {
       });
 
   ref.onDispose(() {
-    debounce?.cancel();
+    discoveryDebounce?.cancel();
+    ownedDebounce?.cancel();
     unawaited(client.removeChannel(channel));
   });
 });

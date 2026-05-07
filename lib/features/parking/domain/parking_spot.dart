@@ -33,6 +33,7 @@ class ParkingSpot {
     this.city,
     this.dailyEndMinute,
     this.dailyStartMinute,
+    this.description,
     this.hostAvatarUrl,
     this.hostName,
     this.hostPhone,
@@ -40,6 +41,8 @@ class ParkingSpot {
     this.isHostedByCurrentUser = false,
     this.listingRevision = 0,
     this.postalCode,
+    this.skipWeekends = false,
+    this.status = 'active',
     this.updatedAt,
     this.version = 1,
     List<String>? imageUrls = const [],
@@ -62,6 +65,7 @@ class ParkingSpot {
   final DateTime? availableToDate;
   final int? dailyEndMinute;
   final int? dailyStartMinute;
+  final String? description;
   final int slotsAvailable;
   final GeoPoint location;
   final List<ParkingAmenity> amenities;
@@ -77,6 +81,8 @@ class ParkingSpot {
   final bool isHostedByCurrentUser;
   final int listingRevision;
   final String? postalCode;
+  final bool skipWeekends;
+  final String status;
   final DateTime? updatedAt;
   final int version;
   final List<String>? _imageUrls;
@@ -114,6 +120,7 @@ class ParkingSpot {
     String? currency,
     int? dailyEndMinute,
     int? dailyStartMinute,
+    String? description,
     double? distanceKm,
     String? hostAvatarUrl,
     String? hostName,
@@ -129,7 +136,9 @@ class ParkingSpot {
     int? price,
     double? rating,
     int? reviewCount,
+    bool? skipWeekends,
     int? slotsAvailable,
+    String? status,
     String? title,
     DateTime? updatedAt,
     int? version,
@@ -159,6 +168,7 @@ class ParkingSpot {
     city: city ?? this.city,
     dailyEndMinute: dailyEndMinute ?? this.dailyEndMinute,
     dailyStartMinute: dailyStartMinute ?? this.dailyStartMinute,
+    description: description ?? this.description,
     hostAvatarUrl: hostAvatarUrl ?? this.hostAvatarUrl,
     hostName: hostName ?? this.hostName,
     hostPhone: hostPhone ?? this.hostPhone,
@@ -166,8 +176,10 @@ class ParkingSpot {
     isHostedByCurrentUser: isHostedByCurrentUser ?? this.isHostedByCurrentUser,
     listingRevision: listingRevision ?? this.listingRevision,
     postalCode: postalCode ?? this.postalCode,
+    skipWeekends: skipWeekends ?? this.skipWeekends,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
+    status: status ?? this.status,
     imageUrls: imageUrls ?? _imageUrls,
   );
 
@@ -189,6 +201,7 @@ class ParkingSpot {
     'availabilitySummary': availabilitySummary,
     'dailyEndMinute': dailyEndMinute,
     'dailyStartMinute': dailyStartMinute,
+    'description': description,
     'slotsAvailable': slotsAvailable,
     'location': location.toJson(),
     'amenities': amenities.map((entry) => entry.name).toList(),
@@ -205,6 +218,8 @@ class ParkingSpot {
     'isHostedByCurrentUser': isHostedByCurrentUser,
     'listingRevision': listingRevision,
     'postalCode': postalCode,
+    'skipWeekends': skipWeekends,
+    'status': status,
     'updatedAt': updatedAt?.toIso8601String(),
     'version': version,
   };
@@ -279,7 +294,10 @@ class ParkingSpot {
       distanceKm: ((map['distanceKm'] ?? 0) as num).toDouble(),
       rating: ((map['rating'] ?? 0) as num).toDouble(),
       reviewCount: ((map['reviewCount'] ?? 0) as num).toInt(),
-      price: ((map['price'] ?? map['hourlyPrice'] ?? 0) as num).toInt(),
+      price:
+          ((map['price'] ?? map['hourlyPrice'] ?? map['hourly_price'] ?? 0)
+                  as num)
+              .toInt(),
       currency: map['currency']?.toString() ?? 'INR',
       cadence: BookingCadence.values.firstWhere(
         (entry) => entry.name == map['cadence'],
@@ -292,7 +310,13 @@ class ParkingSpot {
       availableToDate: availableToDate,
       dailyEndMinute: dailyEndMinute,
       dailyStartMinute: dailyStartMinute,
-      slotsAvailable: ((map['slotsAvailable'] ?? 0) as num).toInt(),
+      description: _firstStringFrom(map, const [
+        'description',
+        'accessInstructions',
+        'access_instructions',
+      ]),
+      slotsAvailable:
+          ((map['slotsAvailable'] ?? map['slots_count'] ?? 0) as num).toInt(),
       location: _locationFrom(map),
       amenities: (map['amenities'] as List<dynamic>? ?? const [])
           .map(_amenityFrom)
@@ -346,6 +370,8 @@ class ParkingSpot {
         'revision',
       ]),
       postalCode: _firstStringFrom(map, const ['postalCode', 'postal_code']),
+      skipWeekends: _boolFrom(map, const ['skipWeekends', 'skip_weekends']),
+      status: _firstStringFrom(map, const ['status']) ?? 'active',
       updatedAt: _dateTimeFrom(map, const ['updatedAt', 'updated_at']),
       version: _intFrom(map, const ['version'], fallback: 1),
       imageUrls: _imageUrlsFrom(map, imageUrl),

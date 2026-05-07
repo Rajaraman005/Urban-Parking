@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../config/app_providers.dart';
 import '../../booking/domain/booking_quote.dart';
+import '../../parking/domain/parking_availability.dart';
 import '../../parking/domain/parking_spot.dart';
 import '../../parking/presentation/parking_listing_store.dart';
 
@@ -156,6 +157,8 @@ class BookingTimeSelection {
     DateTime date,
   ) {
     final dateOnly = _dateOnly(date);
+    if (spot.skipWeekends && isParkingWeekend(dateOnly)) return null;
+
     var start = DateTime(
       dateOnly.year,
       dateOnly.month,

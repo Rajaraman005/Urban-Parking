@@ -1,0 +1,45 @@
+{
+  "name": "urban-parking-admin",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "playwright test",
+    "bootstrap:admin": "node scripts/bootstrap-admin.mjs"
+  },
+  "overrides": {
+    "postcss": "8.5.14"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "2.0.2",
+    "@supabase/supabase-js": "2.105.3",
+    "clsx": "2.1.1",
+    "lucide-react": "1.14.0",
+    "next": "16.2.5",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "server-only": "0.0.1",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.59.1",
+    "@tailwindcss/postcss": "4.2.4",
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/react": "16.1.0",
+    "@types/node": "22.10.2",
+    "@types/react": "19.0.2",
+    "@types/react-dom": "19.0.2",
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.2.5",
+    "jsdom": "25.0.1",
+    "tailwindcss": "4.2.4",
+    "typescript": "5.7.2",
+    "vitest": "4.1.5"
+  }
+}

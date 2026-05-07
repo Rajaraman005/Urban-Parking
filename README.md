@@ -85,6 +85,27 @@ npm run android
 npm run build:android
 ```
 
+When more than one Android phone is connected, choose the target device
+explicitly:
+
+```powershell
+npm run devices
+npm run android:device -- <device-id>
+```
+
+The raw Flutter bridge also accepts:
+
+```powershell
+scripts\flutter_with_env.ps1 run --device-id <device-id>
+```
+
+You can also keep using `npm run android` with a selected phone:
+
+```powershell
+$env:URBAN_PARKING_DEVICE_ID="<device-id>"
+npm run android
+```
+
 For Android maps, set this in `.env`:
 
 ```bash

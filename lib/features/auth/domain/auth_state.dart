@@ -19,6 +19,7 @@ class UserProfile {
     this.intent,
     this.setupStep = 'intent',
     this.setupDraftId,
+    this.hostParkingDraftId,
     this.onboardingCompletedAt,
     this.version = 1,
   });
@@ -33,6 +34,7 @@ class UserProfile {
   final String? intent;
   final String setupStep;
   final String? setupDraftId;
+  final String? hostParkingDraftId;
   final DateTime? onboardingCompletedAt;
   final int version;
 
@@ -49,6 +51,7 @@ class UserProfile {
     intent: json['intent']?.toString(),
     setupStep: json['setup_step']?.toString() ?? 'intent',
     setupDraftId: json['setup_draft_id']?.toString(),
+    hostParkingDraftId: json['host_parking_draft_id']?.toString(),
     onboardingCompletedAt: DateTime.tryParse(
       json['onboarding_completed_at']?.toString() ?? '',
     ),
@@ -64,6 +67,7 @@ class UserProfile {
     String? intent,
     DateTime? onboardingCompletedAt,
     String? phone,
+    String? hostParkingDraftId,
     String? setupDraftId,
     String? setupStep,
     int? version,
@@ -76,6 +80,7 @@ class UserProfile {
       fullName: fullName ?? this.fullName,
       gender: gender ?? this.gender,
       intent: intent ?? this.intent,
+      hostParkingDraftId: hostParkingDraftId ?? this.hostParkingDraftId,
       onboardingCompletedAt:
           onboardingCompletedAt ?? this.onboardingCompletedAt,
       phone: phone ?? this.phone,

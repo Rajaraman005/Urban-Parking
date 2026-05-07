@@ -34,6 +34,7 @@ interface ParkingSpaceRow {
   city: string | null;
   daily_end_minute: number | null;
   daily_start_minute: number | null;
+  access_instructions?: string | null;
   host_id: string;
   hourly_price: number | null;
   id: string;
@@ -43,6 +44,7 @@ interface ParkingSpaceRow {
   parking_space_photos?: ParkingPhotoRow[];
   parking_type: string | null;
   postal_code: string | null;
+  skip_weekends?: boolean | null;
   slots_count: number;
   title: string | null;
   updated_at: string | null;
@@ -296,6 +298,7 @@ const toParkingSpot = (row: ParkingSpaceRow, profile?: ProfileRow | null, curren
     cadence: "hourly",
     city: row.city?.trim() || undefined,
     currency: "INR",
+    description: row.access_instructions?.trim() || undefined,
     distanceKm: 0,
     hostAvatarUrl: profile?.avatar_url?.trim() || undefined,
     hostName: profile?.full_name?.trim() || undefined,
@@ -314,6 +317,7 @@ const toParkingSpot = (row: ParkingSpaceRow, profile?: ProfileRow | null, curren
     postalCode: row.postal_code?.trim() || undefined,
     rating: 0,
     reviewCount: 0,
+    skipWeekends: row.skip_weekends ?? false,
     slotsAvailable: row.slots_count,
     title: row.title ?? "Parking space",
     updatedAt: row.updated_at ?? undefined,
@@ -344,6 +348,7 @@ const parkingDetailSelectCandidates = [
     "host_id",
     "title",
     "address",
+    "access_instructions",
     "address_confidence",
     "address_place_id",
     "address_provider",
@@ -363,6 +368,7 @@ const parkingDetailSelectCandidates = [
     "available_to_date",
     "daily_start_minute",
     "daily_end_minute",
+    "skip_weekends",
     "parking_space_photos(secure_url,sort_order,upload_status)"
   ].join(","),
   [
@@ -370,6 +376,7 @@ const parkingDetailSelectCandidates = [
     "host_id",
     "title",
     "address",
+    "access_instructions",
     "city",
     "locality",
     "latitude",
@@ -389,6 +396,7 @@ const parkingDetailSelectCandidates = [
     "host_id",
     "title",
     "address",
+    "access_instructions",
     "address_confidence",
     "address_place_id",
     "address_provider",
@@ -407,7 +415,26 @@ const parkingDetailSelectCandidates = [
     "available_from_date",
     "available_to_date",
     "daily_start_minute",
-    "daily_end_minute"
+    "daily_end_minute",
+    "skip_weekends"
+  ].join(","),
+  [
+    "id",
+    "host_id",
+    "title",
+    "address",
+    "access_instructions",
+    "city",
+    "locality",
+    "latitude",
+    "longitude",
+    "slots_count",
+    "hourly_price",
+    "availability_summary",
+    "parking_type",
+    "postal_code",
+    "updated_at",
+    "vehicle_fit"
   ].join(","),
   [
     "id",

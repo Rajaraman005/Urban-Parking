@@ -7,6 +7,7 @@ import '../../../core/network/api_client.dart';
 import '../../../core/utils/geo_discovery/geo_discovery_engine.dart';
 import '../../../core/utils/geo_discovery/geo_types.dart';
 import '../../booking/domain/booking_quote.dart';
+import '../domain/parking_availability.dart';
 import '../domain/parking_repository.dart';
 import '../domain/parking_spot.dart';
 import 'parking_spot_cache.dart';
@@ -190,6 +191,10 @@ class ParkingRepositoryImpl implements ParkingRepository {
     required DateTime startAt,
     required DateTime endAt,
   }) {
+    if (spot.skipWeekends && parkingRangeContainsWeekend(startAt, endAt)) {
+      throw Exception('This parking spot is not available on weekends.');
+    }
+
     final minutes = endAt.difference(startAt).inMinutes;
     final durationHours = (minutes / 60).ceil().clamp(1, 24).toInt();
     final subtotal = spot.price * durationHours;

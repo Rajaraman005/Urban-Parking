@@ -16,15 +16,19 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  static const _statusBarColor = Color(0xFF82F126);
+  static const _statusBarColor = Colors.black;
   static const _bodyBackgroundColor = Colors.black;
-  static const _buttonHeight = 44.0;
+  static const _panelColor = Colors.white;
+  static const _primaryActionColor = Color(0xFF070708);
+  static const _secondaryBorderColor = Color(0xFF171719);
+  static const _legalTextColor = Color(0xFF565656);
+  static const _buttonHeight = 52.0;
   static const _autoPlayInterval = Duration(milliseconds: 4200);
   static const _slideDuration = Duration(milliseconds: 820);
   static const _systemUiStyle = SystemUiOverlayStyle(
     statusBarColor: _statusBarColor,
-    statusBarIconBrightness: Brightness.dark,
-    statusBarBrightness: Brightness.light,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
   );
 
   final PageController _pageController = PageController();
@@ -141,10 +145,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             Align(
               alignment: Alignment.bottomCenter,
               child: Container(
-                padding: const EdgeInsets.fromLTRB(18, 24, 18, 24),
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
                 decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                  color: _panelColor,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
                 ),
                 child: SafeArea(
                   top: false,
@@ -155,37 +159,30 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         width: double.infinity,
                         height: _buttonHeight,
                         child: FilledButton.icon(
-                          style: FilledButton.styleFrom(
-                            textStyle: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
+                          style: _primaryActionButtonStyle,
                           onPressed: () => context.go('/auth?mode=signup'),
-                          icon: const Icon(Icons.person_add_alt_1, size: 18),
+                          icon: const Icon(
+                            Icons.person_add_alt_1_rounded,
+                            size: 20,
+                          ),
                           label: const Text('Create account'),
                         ),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 12),
                       const _ActionDivider(),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
                         height: _buttonHeight,
                         child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            textStyle: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
+                          style: _secondaryActionButtonStyle,
                           onPressed: () => context.go('/auth?mode=login'),
-                          icon: const Icon(Icons.login, size: 18),
+                          icon: const Icon(Icons.login_rounded, size: 20),
                           label: const Text('Log in'),
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      const LegalConsentText(),
+                      const SizedBox(height: 18),
+                      const LegalConsentText(textColor: _legalTextColor),
                     ],
                   ),
                 ),
@@ -196,6 +193,42 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
     );
   }
+
+  static final ButtonStyle _primaryActionButtonStyle = FilledButton.styleFrom(
+    backgroundColor: _primaryActionColor,
+    foregroundColor: _panelColor,
+    iconColor: _panelColor,
+    minimumSize: const Size.fromHeight(_buttonHeight),
+    fixedSize: const Size.fromHeight(_buttonHeight),
+    padding: EdgeInsets.zero,
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    visualDensity: VisualDensity.compact,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    textStyle: const TextStyle(
+      fontSize: 15,
+      fontWeight: FontWeight.w900,
+      height: 1,
+    ),
+  );
+
+  static final ButtonStyle _secondaryActionButtonStyle =
+      OutlinedButton.styleFrom(
+        backgroundColor: _panelColor,
+        foregroundColor: _primaryActionColor,
+        iconColor: _primaryActionColor,
+        minimumSize: const Size.fromHeight(_buttonHeight),
+        fixedSize: const Size.fromHeight(_buttonHeight),
+        padding: EdgeInsets.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+        side: const BorderSide(color: _secondaryBorderColor, width: 1.3),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        textStyle: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w900,
+          height: 1,
+        ),
+      );
 }
 
 class _OnboardingSlideView extends StatelessWidget {

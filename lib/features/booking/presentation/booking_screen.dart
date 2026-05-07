@@ -200,6 +200,11 @@ class _PropertyDetailsContent extends ConsumerWidget {
   }
 
   String _descriptionFor(ParkingSpot spot) {
+    final description = spot.description?.trim();
+    if (description != null && description.isNotEmpty) {
+      return description;
+    }
+
     final locality = spot.locality.isEmpty ? 'this location' : spot.locality;
     return 'Verified parking space in $locality with secure access, clear host details, and a clean location profile for quick decisions.';
   }

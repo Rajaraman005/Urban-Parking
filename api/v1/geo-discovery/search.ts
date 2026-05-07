@@ -51,6 +51,7 @@ interface ParkingSpaceRow {
   locality: string | null;
   longitude: number | null;
   parking_type: string | null;
+  skip_weekends?: boolean | null;
   slots_count: number;
   title: string | null;
   vehicle_fit: string | null;
@@ -345,6 +346,7 @@ const parkingSelectCandidates = [
     "available_to_date",
     "daily_start_minute",
     "daily_end_minute",
+    "skip_weekends",
     "parking_space_photos(parking_space_id,secure_url,sort_order,upload_status)",
   ].join(","),
   [
@@ -377,6 +379,7 @@ const parkingSelectCandidates = [
     "available_to_date",
     "daily_start_minute",
     "daily_end_minute",
+    "skip_weekends",
   ].join(","),
   [
     "id",
@@ -640,6 +643,7 @@ const loadParking = async (query: ReturnType<typeof normalizeRequest>): Promise<
             price: row.hourly_price,
             rating: 0,
             reviewCount: 0,
+            skipWeekends: row.skip_weekends ?? false,
             slotsAvailable: row.slots_count,
             title: row.title,
             supportedVehicleTypes: supportedVehicleTypesFor(row.vehicle_fit),

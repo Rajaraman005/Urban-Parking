@@ -104,6 +104,29 @@ function Test-UsableConfigValue {
   return $true
 }
 
+function Get-PreferredDeviceId {
+  foreach ($name in @("URBAN_PARKING_DEVICE_ID", "FLUTTER_DEVICE_ID")) {
+    $value = [Environment]::GetEnvironmentVariable($name, "Process")
+    if (-not [string]::IsNullOrWhiteSpace($value)) {
+      return $value.Trim()
+    }
+  }
+
+  return $null
+}
+
+function Format-FlutterDeviceList {
+  param([object[]]$Devices)
+
+  if (-not $Devices -or $Devices.Count -eq 0) {
+    return "  - none"
+  }
+
+  return (($Devices | ForEach-Object {
+    "  - $($_.name) ($($_.id))"
+  }) -join [Environment]::NewLine)
+}
+
 function Resolve-DeviceAlias {
   param(
     [string]$FlutterExe,
@@ -143,9 +166,31 @@ function Resolve-DeviceAlias {
     return $Alias
   }
 
-  $selected = $matchingDevices[0]
-  Write-Host "Resolved device alias '$Alias' to '$($selected.name)' ($($selected.id))" -ForegroundColor Cyan
-  return $selected.id
+  $preferredDeviceId = Get-PreferredDeviceId
+  if ($preferredDeviceId) {
+    $selected = @(
+      $matchingDevices |
+        Where-Object { $_.id -eq $preferredDeviceId -or $_.name -eq $preferredDeviceId } |
+        Select-Object -First 1
+    )
+
+    if ($selected.Count -gt 0) {
+      Write-Host "Resolved device alias '$Alias' to '$($selected[0].name)' ($($selected[0].id))" -ForegroundColor Cyan
+      return $selected[0].id
+    }
+
+    $availableDevices = Format-FlutterDeviceList $matchingDevices
+    throw "Requested device '$preferredDeviceId' is not a connected supported $Alias device. Connected $Alias devices:$([Environment]::NewLine)$availableDevices"
+  }
+
+  if ($matchingDevices.Count -eq 1) {
+    $selected = $matchingDevices[0]
+    Write-Host "Resolved device alias '$Alias' to '$($selected.name)' ($($selected.id))" -ForegroundColor Cyan
+    return $selected.id
+  }
+
+  $availableDevices = Format-FlutterDeviceList $matchingDevices
+  throw "Multiple $Alias devices are connected. Choose the phone explicitly with: scripts\flutter_with_env.ps1 run --device-id <device-id> or set `$env:URBAN_PARKING_DEVICE_ID='<device-id>'; npm run android$([Environment]::NewLine)Connected $Alias devices:$([Environment]::NewLine)$availableDevices"
 }
 
 function Resolve-DeviceAliasesInArgs {
@@ -166,7 +211,7 @@ function Resolve-DeviceAliasesInArgs {
 }
 
 if ($FlutterArgs.Count -eq 0) {
-  throw "Usage: scripts/flutter_with_env.ps1 <flutter arguments>. Example: scripts/flutter_with_env.ps1 run -d android"
+  throw "Usage: scripts/flutter_with_env.ps1 <flutter arguments>. Example: scripts/flutter_with_env.ps1 run --device-id android"
 }
 
 $dotEnv = Read-DotEnvFile (Join-Path $repoRoot ".env")

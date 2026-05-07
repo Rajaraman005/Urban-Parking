@@ -10,6 +10,8 @@ import 'package:urban_parking/features/parking/domain/parking_spot.dart';
 import 'package:urban_parking/features/parking/presentation/parking_listing_store.dart';
 
 void main() {
+  const spotId = 'spot-live';
+
   testWidgets('property details repaint when listing store changes', (
     tester,
   ) async {
@@ -25,11 +27,7 @@ void main() {
         child: Consumer(
           builder: (context, ref, _) {
             store = ref.read(parkingListingStoreProvider.notifier);
-            return const MaterialApp(
-              home: BookingScreen(
-                spotId: '550e8400-e29b-41d4-a716-446655440000',
-              ),
-            );
+            return const MaterialApp(home: BookingScreen(spotId: spotId));
           },
         ),
       ),
@@ -47,13 +45,26 @@ void main() {
     expect(find.text('12 Old Street'), findsOneWidget);
 
     store.applyOptimistic(
-      _spot(address: '98 New Avenue', price: 90, revision: 2, version: 2),
+      _spot(
+        address: '98 New Avenue',
+        description: 'Basement slot beside the lift lobby.',
+        price: 90,
+        revision: 2,
+        version: 2,
+      ),
     );
     await tester.pumpAndSettle();
 
     expect(_textOrRichTextContaining('\u20B990/hr'), findsWidgets);
     expect(find.text('98 New Avenue'), findsOneWidget);
     expect(find.text('12 Old Street'), findsNothing);
+    await tester.scrollUntilVisible(
+      find.text('Basement slot beside the lift lobby.'),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Basement slot beside the lift lobby.'), findsOneWidget);
+    expect(find.text('Covered bay beside the blue gate.'), findsNothing);
   });
 }
 
@@ -110,12 +121,14 @@ class _FakeParkingRepository implements ParkingRepository {
 
 ParkingSpot _spot({
   String address = '12 Old Street',
+  String description = 'Covered bay beside the blue gate.',
   int price = 50,
   int revision = 1,
   int version = 1,
 }) {
+  final bookingDay = DateTime.now().add(const Duration(days: 1));
   return ParkingSpot(
-    id: '550e8400-e29b-41d4-a716-446655440000',
+    id: 'spot-live',
     title: 'Live parking',
     address: address,
     locality: 'Nungambakkam',
@@ -125,8 +138,19 @@ ParkingSpot _spot({
     price: price,
     currency: 'INR',
     cadence: BookingCadence.hourly,
-    availableFrom: DateTime(2026, 5, 7, 9),
-    availableUntil: DateTime(2026, 5, 7, 18),
+    availableFrom: DateTime(
+      bookingDay.year,
+      bookingDay.month,
+      bookingDay.day,
+      9,
+    ),
+    availableUntil: DateTime(
+      bookingDay.year,
+      bookingDay.month,
+      bookingDay.day,
+      18,
+    ),
+    description: description,
     slotsAvailable: 1,
     location: const GeoPoint(latitude: 13.08, longitude: 80.27),
     amenities: const [ParkingAmenity.covered],

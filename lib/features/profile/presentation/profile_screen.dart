@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../shared/widgets/app_screen.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../user_setup/presentation/host_setup_launcher.dart';
 import 'profile_display.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -58,8 +59,8 @@ class ProfileScreen extends ConsumerWidget {
                 _ProfileActionTile(
                   icon: Icons.add_home_work_outlined,
                   title: 'Host a parking space',
-                  subtitle: 'Create or continue your listing setup',
-                  onTap: () => context.push('/setup/host-basics'),
+                  subtitle: 'Create or continue a parking listing',
+                  onTap: () => unawaited(startHostSetup(context, ref)),
                 ),
                 _ProfileActionTile(
                   icon: Icons.garage_outlined,

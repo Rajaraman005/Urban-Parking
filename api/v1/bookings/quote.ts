@@ -31,6 +31,7 @@ interface NormalizedQuoteRequest {
 interface ParkingSpacePriceRow {
   hourly_price: number | null;
   id: string;
+  skip_weekends?: boolean | null;
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -159,6 +160,32 @@ const calculateQuote = (params: {
   };
 };
 
+const dateOnlyUtc = (value: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!match) {
+    return null;
+  }
+
+  return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+};
+
+const containsWeekendDate = (startAt: string, endAt: string) => {
+  const startDate = dateOnlyUtc(startAt);
+  const endDate = dateOnlyUtc(endAt);
+  if (!startDate || !endDate) return false;
+
+  for (
+    let cursor = new Date(startDate);
+    cursor.getTime() <= endDate.getTime();
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  ) {
+    const day = cursor.getUTCDay();
+    if (day === 0 || day === 6) return true;
+  }
+
+  return false;
+};
+
 export default async function handler(request: VercelRequestLike, response: VercelResponseLike) {
   setCorsHeaders(response);
 
@@ -177,7 +204,7 @@ export default async function handler(request: VercelRequestLike, response: Verc
     const client = supabase();
     const { data, error } = await client
       .from("parking_spaces")
-      .select("id,hourly_price")
+      .select("id,hourly_price,skip_weekends")
       .eq("id", body.spotId)
       .eq("status", "active")
       .maybeSingle();
@@ -197,6 +224,12 @@ export default async function handler(request: VercelRequestLike, response: Verc
     if (typeof row.hourly_price !== "number" || row.hourly_price <= 0) {
       throw Object.assign(new Error("Parking spot pricing is unavailable"), {
         code: "pricing_unavailable",
+        status: 422
+      });
+    }
+    if (row.skip_weekends === true && containsWeekendDate(body.startAt, body.endAt)) {
+      throw Object.assign(new Error("This parking spot is not available on Saturday or Sunday"), {
+        code: "weekend_booking_unavailable",
         status: 422
       });
     }

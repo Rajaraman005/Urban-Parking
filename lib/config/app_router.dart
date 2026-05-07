@@ -51,7 +51,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/setup/host-basics',
-        builder: (context, state) => const HostSpaceBasicsScreen(),
+        builder: (context, state) => HostSpaceBasicsScreen(
+          createNew: state.uri.queryParameters['new'] == '1',
+        ),
       ),
       GoRoute(
         path: '/setup/host-pricing',
