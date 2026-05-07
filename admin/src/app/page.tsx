@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
 export default function LandingPage() {
   return (
     <main className="flex min-h-screen items-center justify-center overflow-hidden bg-[#08090a] px-5 py-8 text-white">

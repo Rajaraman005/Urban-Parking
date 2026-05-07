@@ -17,44 +17,49 @@ export interface LoginActionState {
 }
 
 export async function loginAction(_state: LoginActionState, formData: FormData): Promise<LoginActionState> {
-  await assertSameOrigin();
-  const parsed = loginSchema.safeParse({
-    password: formData.get("password"),
-    username: formData.get("username")
-  });
+  try {
+    await assertSameOrigin();
+    const parsed = loginSchema.safeParse({
+      password: formData.get("password"),
+      username: formData.get("username")
+    });
 
-  if (!parsed.success) {
-    return { error: "Enter a valid username and password." };
-  }
+    if (!parsed.success) {
+      return { error: "Enter a valid username and password." };
+    }
 
-  const identity = await requestIdentity();
-  const rateState = await loginRateState(parsed.data.username, identity.ipAddress);
-  if (rateState.blocked) {
-    await recordLoginAttempt({
-      failureReason: "rate_limited",
+    const identity = await requestIdentity();
+    const rateState = await loginRateState(parsed.data.username, identity.ipAddress);
+    if (rateState.blocked) {
+      await recordLoginAttempt({
+        failureReason: "rate_limited",
+        ipHash: rateState.ipHash,
+        success: false,
+        username: parsed.data.username
+      });
+      return { error: "Too many attempts. Try again later." };
+    }
+
+    const result = await authenticateAdmin({
       ipHash: rateState.ipHash,
-      success: false,
+      password: parsed.data.password,
+      userAgent: identity.userAgent,
       username: parsed.data.username
     });
-    return { error: "Too many attempts. Try again later." };
-  }
 
-  const result = await authenticateAdmin({
-    ipHash: rateState.ipHash,
-    password: parsed.data.password,
-    userAgent: identity.userAgent,
-    username: parsed.data.username
-  });
+    await recordLoginAttempt({
+      failureReason: result.ok ? undefined : result.reason,
+      ipHash: rateState.ipHash,
+      success: result.ok,
+      username: parsed.data.username
+    });
 
-  await recordLoginAttempt({
-    failureReason: result.ok ? undefined : result.reason,
-    ipHash: rateState.ipHash,
-    success: result.ok,
-    username: parsed.data.username
-  });
-
-  if (!result.ok) {
-    return { error: "Username or password is incorrect." };
+    if (!result.ok) {
+      return { error: "Username or password is incorrect." };
+    }
+  } catch (error) {
+    console.error("Admin login failed", error);
+    return { error: "Admin login is not configured correctly. Check Vercel environment variables and database migrations." };
   }
 
   redirect("/reviews");
