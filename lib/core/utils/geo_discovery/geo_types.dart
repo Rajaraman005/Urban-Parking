@@ -125,7 +125,7 @@ class GeoDiscoveryError implements Exception {
   final bool retryable;
 
   @override
-  String toString() => 'GeoDiscoveryError(${code.apiValue}, $message)';
+  String toString() => message;
 }
 
 class GeoPoint {

@@ -41,13 +41,7 @@ class RestMarketplaceDataSource implements MarketplaceDataSource {
         'sourceMode': AppConfig.geoRuntimeMode,
         'status': 'rest_transport_error',
       });
-      final code = GeoFailureCode.fromApi(failure.code);
-      throw GeoDiscoveryError(
-        failure.message,
-        code: code == GeoFailureCode.unknown
-            ? GeoFailureCode.networkError
-            : code,
-      );
+      throw _geoDiscoveryErrorFor(failure.message, failure.code);
     } catch (error) {
       final failure = ApiClient.toFailure(error);
       telemetry.warn(TelemetryEvent.geoSearchFailed, {
@@ -57,14 +51,47 @@ class RestMarketplaceDataSource implements MarketplaceDataSource {
         'sourceMode': AppConfig.geoRuntimeMode,
         'status': 'rest_decode_error',
       });
-      final code = GeoFailureCode.fromApi(failure.code);
-      throw GeoDiscoveryError(
-        failure.message,
-        code: code == GeoFailureCode.unknown
-            ? GeoFailureCode.networkError
-            : code,
-      );
+      throw _geoDiscoveryErrorFor(failure.message, failure.code);
     }
+  }
+}
+
+GeoDiscoveryError _geoDiscoveryErrorFor(String message, String? apiCode) {
+  final parsedCode = GeoFailureCode.fromApi(apiCode);
+  final code = parsedCode == GeoFailureCode.unknown
+      ? GeoFailureCode.networkError
+      : parsedCode;
+  return GeoDiscoveryError(
+    _geoDiscoveryMessage(message, code),
+    code: code,
+    retryable: _isRetryableGeoFailure(code),
+  );
+}
+
+String _geoDiscoveryMessage(String message, GeoFailureCode code) {
+  switch (code) {
+    case GeoFailureCode.serverConfigError:
+      return 'Nearby discovery is temporarily unavailable while the server is being configured.';
+    case GeoFailureCode.databaseError:
+    case GeoFailureCode.contractMismatch:
+      return 'Nearby discovery is temporarily unavailable while search data is being updated.';
+    case GeoFailureCode.schemaVersionUnsupported:
+      return 'Nearby discovery needs an app update before it can search.';
+    default:
+      return message;
+  }
+}
+
+bool _isRetryableGeoFailure(GeoFailureCode code) {
+  switch (code) {
+    case GeoFailureCode.backendTimeout:
+    case GeoFailureCode.networkError:
+    case GeoFailureCode.offline:
+    case GeoFailureCode.rateLimited:
+    case GeoFailureCode.unknown:
+      return true;
+    default:
+      return false;
   }
 }
 

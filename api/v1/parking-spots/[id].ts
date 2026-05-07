@@ -58,8 +58,29 @@ interface ProfileRow {
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const corsOrigin = process.env.GEO_DISCOVERY_ALLOWED_ORIGIN ?? "*";
 const fallbackImageUrl = "https://images.unsplash.com/photo-1506521781263-d8422e82f27a";
+
+const envValue = (...names: string[]) => {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (value) {
+      return value;
+    }
+  }
+
+  return undefined;
+};
+
+const supabaseAnonKey = () =>
+  envValue(
+    "SUPABASE_ANON_KEY",
+    "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    "VITE_SUPABASE_ANON_KEY",
+    "PUBLIC_SUPABASE_ANON_KEY",
+  );
+const supabaseServiceKey = () => envValue("SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_KEY");
+const corsOrigin = envValue("GEO_DISCOVERY_ALLOWED_ORIGIN") ?? "*";
 
 const setCorsHeaders = (response: VercelResponseLike) => {
   response.setHeader("Access-Control-Allow-Origin", corsOrigin);
@@ -127,7 +148,13 @@ const shouldAttemptTableFallback = (error: unknown) => {
 };
 
 const supabaseUrl = () => {
-  const url = process.env.SUPABASE_URL;
+  const url = envValue(
+    "SUPABASE_URL",
+    "EXPO_PUBLIC_SUPABASE_URL",
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "VITE_SUPABASE_URL",
+    "PUBLIC_SUPABASE_URL",
+  );
   if (!url) {
     throw serverConfigError("Missing Supabase URL server environment variable");
   }
@@ -157,13 +184,13 @@ const bearerTokenFor = (request: VercelRequestLike) => {
 
 const supabaseForRpc = (request: VercelRequestLike) => {
   const accessToken = bearerTokenFor(request);
-  const anonKey = process.env.SUPABASE_ANON_KEY;
+  const anonKey = supabaseAnonKey();
   if (accessToken && anonKey) {
     return createServerSupabaseClient(anonKey, accessToken);
   }
 
   const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ??
+    supabaseServiceKey() ??
     anonKey;
 
   if (!key) {
@@ -175,7 +202,7 @@ const supabaseForRpc = (request: VercelRequestLike) => {
 
 const authenticatedUserIdFor = async (request: VercelRequestLike) => {
   const accessToken = bearerTokenFor(request);
-  const anonKey = process.env.SUPABASE_ANON_KEY;
+  const anonKey = supabaseAnonKey();
   if (!accessToken || !anonKey) {
     return null;
   }
@@ -188,7 +215,7 @@ const authenticatedUserIdFor = async (request: VercelRequestLike) => {
 };
 
 const supabaseForTableFallback = () => {
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceKey = supabaseServiceKey();
 
   if (!serviceKey) {
     throw serverConfigError("Missing SUPABASE_SERVICE_ROLE_KEY for direct table fallback");

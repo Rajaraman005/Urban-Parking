@@ -16,6 +16,8 @@
     "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/flutter_full_check.ps1",
     "verify:quick": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/flutter_full_check.ps1 -SkipBuild"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@supabase/supabase-js": "^2.105.3"
+  },
   "devDependencies": {}
 }

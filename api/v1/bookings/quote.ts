@@ -34,7 +34,19 @@ interface ParkingSpacePriceRow {
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const corsOrigin = process.env.GEO_DISCOVERY_ALLOWED_ORIGIN ?? "*";
+
+const envValue = (...names: string[]) => {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (value) {
+      return value;
+    }
+  }
+
+  return undefined;
+};
+
+const corsOrigin = envValue("GEO_DISCOVERY_ALLOWED_ORIGIN") ?? "*";
 
 const setCorsHeaders = (response: VercelResponseLike) => {
   response.setHeader("Access-Control-Allow-Origin", corsOrigin);
@@ -59,8 +71,22 @@ const responseError = (response: VercelResponseLike, error: unknown) => {
 };
 
 const supabase = () => {
-  const url = process.env.SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_ANON_KEY;
+  const url = envValue(
+    "SUPABASE_URL",
+    "EXPO_PUBLIC_SUPABASE_URL",
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "VITE_SUPABASE_URL",
+    "PUBLIC_SUPABASE_URL",
+  );
+  const serviceKey =
+    envValue("SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_KEY") ??
+    envValue(
+      "SUPABASE_ANON_KEY",
+      "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      "VITE_SUPABASE_ANON_KEY",
+      "PUBLIC_SUPABASE_ANON_KEY",
+    );
 
   if (!url || !serviceKey) {
     throw Object.assign(new Error("Missing Supabase server environment variables"), {

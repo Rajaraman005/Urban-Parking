@@ -103,7 +103,18 @@ const ALLOWED_SORTS = new Set<GeoSortKey>(["distance", "price", "rating"]);
 const EARTH_RADIUS_KM = 6371.0088;
 const FALLBACK_IMAGE_URL = "https://images.unsplash.com/photo-1506521781263-d8422e82f27a";
 
-const corsOrigin = process.env.GEO_DISCOVERY_ALLOWED_ORIGIN ?? "*";
+const envValue = (...names: string[]) => {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (value) {
+      return value;
+    }
+  }
+
+  return undefined;
+};
+
+const corsOrigin = envValue("GEO_DISCOVERY_ALLOWED_ORIGIN") ?? "*";
 
 const toNumber = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null);
 
@@ -492,7 +503,13 @@ const setCorsHeaders = (response: VercelResponseLike) => {
 };
 
 const supabaseUrl = () => {
-  const url = process.env.SUPABASE_URL;
+  const url = envValue(
+    "SUPABASE_URL",
+    "EXPO_PUBLIC_SUPABASE_URL",
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "VITE_SUPABASE_URL",
+    "PUBLIC_SUPABASE_URL",
+  );
   if (!url) {
     throw serverConfigError("Missing Supabase URL server environment variable");
   }
@@ -508,8 +525,14 @@ const createServerSupabaseClient = (key: string) =>
 
 const supabaseForRpc = () => {
   const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ??
-    process.env.SUPABASE_ANON_KEY;
+    envValue("SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_KEY") ??
+    envValue(
+      "SUPABASE_ANON_KEY",
+      "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      "VITE_SUPABASE_ANON_KEY",
+      "PUBLIC_SUPABASE_ANON_KEY",
+    );
 
   if (!key) {
     throw serverConfigError("Missing Supabase RPC environment variable");
@@ -519,7 +542,7 @@ const supabaseForRpc = () => {
 };
 
 const supabaseForTableFallback = () => {
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceKey = envValue("SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_KEY");
 
   if (!serviceKey) {
     throw serverConfigError("Missing SUPABASE_SERVICE_ROLE_KEY for direct table fallback");

@@ -90,6 +90,16 @@ void main() {
 
     expect(repository.calls, 1);
   });
+
+  test('geo discovery errors stringify to user-facing messages', () {
+    const error = GeoDiscoveryError(
+      'Nearby discovery is temporarily unavailable.',
+      code: GeoFailureCode.serverConfigError,
+      retryable: false,
+    );
+
+    expect(error.toString(), 'Nearby discovery is temporarily unavailable.');
+  });
 }
 
 class _FakeGeoRepository implements GeoDiscoveryRepository {

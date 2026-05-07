@@ -57,6 +57,23 @@ repositories compose REST/Supabase data sources.
 Operational targets and rollout rules live in
 `docs/flutter_migration_operating_model.md`.
 
+### Geo Discovery Deployment Checklist
+
+The mobile app calls `API_BASE_URL` for live nearby search. The deployed API
+must have these Vercel/serverless environment variables:
+
+```bash
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_ANON_KEY=your-public-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```
+
+The geo search endpoint also expects the Supabase migrations in
+`supabase/migrations/` to be applied, especially
+`202605060001_geo_discovery_public_search_repair.sql`. If that migration is
+not deployed, the API can still use its service-role table fallback, but only
+when `SUPABASE_SERVICE_ROLE_KEY` is configured on the API host.
+
 ## Environment
 
 Local Flutter run/build commands read `.env` through
