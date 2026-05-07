@@ -13,7 +13,6 @@ function contentSecurityPolicy(nonce: string) {
   const scriptSrc = [
     "'self'",
     `'nonce-${nonce}'`,
-    "'strict-dynamic'",
     ...(isDevelopment ? ["'unsafe-eval'"] : [])
   ].join(" ");
 
