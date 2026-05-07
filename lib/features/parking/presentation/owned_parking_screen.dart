@@ -511,6 +511,7 @@ class _OwnedParkingCard extends StatelessWidget {
       'draft' => 'Continue setup',
       'pending_review' => 'Submitted for review',
       'rejected' => 'Needs updates',
+      'suspended' => 'Temporarily hidden',
       _ => 'Active listing',
     };
   }
@@ -551,12 +552,14 @@ class _ListingStatusBadge extends StatelessWidget {
       'draft' => 'Draft',
       'pending_review' => 'Review',
       'rejected' => 'Rejected',
+      'suspended' => 'Suspended',
       _ => 'Active',
     };
     final color = switch (status) {
       'draft' => const Color(0xFF92400E),
       'pending_review' => const Color(0xFF1D4ED8),
       'rejected' => const Color(0xFFB91C1C),
+      'suspended' => const Color(0xFFB45309),
       _ => const Color(0xFF047857),
     };
 

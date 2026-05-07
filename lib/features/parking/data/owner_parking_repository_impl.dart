@@ -38,7 +38,14 @@ class OwnerParkingRepositoryImpl implements OwnerParkingRepository {
             '*, parking_space_photos(parking_space_id, secure_url, sort_order, upload_status)',
           )
           .eq('host_id', _client.auth.currentUser!.id)
-          .inFilter('status', const ['active', 'draft', 'pending_review'])
+          .inFilter('status', const [
+            'active',
+            'draft',
+            'pending_review',
+            'rejected',
+            'suspended',
+          ])
+          .isFilter('deleted_at', null)
           .order('updated_at', ascending: false);
       final legacySpaces = response
           .whereType<Map>()

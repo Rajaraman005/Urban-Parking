@@ -207,6 +207,7 @@ export default async function handler(request: VercelRequestLike, response: Verc
       .select("id,hourly_price,skip_weekends")
       .eq("id", body.spotId)
       .eq("status", "active")
+      .is("deleted_at", null)
       .maybeSingle();
 
     if (error) {

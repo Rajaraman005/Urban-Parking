@@ -481,6 +481,7 @@ const queryParkingSpot = async (
     .select(selectClause)
     .eq("id", id)
     .eq("status", "active")
+    .is("deleted_at", null)
     .maybeSingle();
 
 const loadCompatibleParkingSpot = async (client: SupabaseClient, id: string) => {

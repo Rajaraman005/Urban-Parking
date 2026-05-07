@@ -442,6 +442,7 @@ const queryParkingRows = async (
     .from("parking_spaces")
     .select(selectClause)
     .eq("status", "active")
+    .is("deleted_at", null)
     .not("latitude", "is", null)
     .not("longitude", "is", null)
     .gte("latitude", query.latitude - query.radiusKm / 111)
