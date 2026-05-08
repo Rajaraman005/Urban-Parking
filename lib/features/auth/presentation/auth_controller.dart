@@ -72,4 +72,56 @@ class AuthController extends AsyncNotifier<AuthState> {
     }
     state = AsyncData(current.copyWith(profile: profile));
   }
+
+  void setHostDraftReference({
+    required String draftId,
+    required bool legacyDraft,
+    required String step,
+  }) {
+    final current = state.value;
+    final profile = current?.profile;
+    if (current == null || profile == null) return;
+
+    final nextProfile = profile.copyWith(
+      intent: 'host',
+      hostParkingDraftId: legacyDraft ? null : draftId,
+      clearHostParkingDraftId: legacyDraft,
+      setupDraftId: legacyDraft ? draftId : null,
+      clearSetupDraftId: !legacyDraft,
+      setupStep: step,
+      version: profile.version + 1,
+    );
+    state = AsyncData(current.copyWith(profile: nextProfile));
+  }
+
+  void clearHostDraftReference({String? draftId}) {
+    final current = state.value;
+    final profile = current?.profile;
+    if (current == null || profile == null) return;
+
+    final clearsHostDraft =
+        draftId == null || profile.hostParkingDraftId == draftId;
+    final clearsLegacyDraft =
+        draftId == null || profile.setupDraftId == draftId;
+    if (!clearsHostDraft && !clearsLegacyDraft) return;
+
+    final nextProfile = profile.copyWith(
+      clearHostParkingDraftId: clearsHostDraft,
+      clearSetupDraftId: clearsLegacyDraft,
+      setupStep: _isHostSetupStep(profile.setupStep)
+          ? 'profile'
+          : profile.setupStep,
+      version: profile.version + 1,
+    );
+    state = AsyncData(current.copyWith(profile: nextProfile));
+  }
+}
+
+bool _isHostSetupStep(String step) {
+  return const {
+    'host_basics',
+    'host_pricing',
+    'host_photos',
+    'host_review',
+  }.contains(step);
 }

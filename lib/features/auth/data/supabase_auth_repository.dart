@@ -7,9 +7,11 @@ import '../../../core/utils/app_logger.dart';
 import '../../../core/utils/telemetry.dart';
 import '../domain/auth_repository.dart';
 import '../domain/auth_state.dart';
+import 'google_auth_failure_mapper.dart';
 
 class SupabaseAuthRepository implements AuthRepository {
   static Future<void>? _googleInitializeFuture;
+  static const _googleFailureMapper = GoogleAuthFailureMapper();
 
   sb.SupabaseClient get _client => sb.Supabase.instance.client;
 
@@ -91,8 +93,21 @@ class SupabaseAuthRepository implements AuthRepository {
   @override
   Future<AuthState> signInWithGoogle() async {
     _assertConfigured();
+    _assertGoogleConfigured();
     return _mapSupabaseErrors(operation: 'google_sign_in', () async {
       await _ensureGoogleInitialized();
+
+      if (!GoogleSignIn.instance.supportsAuthenticate()) {
+        throw const AuthFailure(
+          'Google sign-in is not supported on this platform build.',
+          code: 'google_sign_in_unsupported',
+        );
+      }
+
+      appLogger.info('google_sign_in_started', {
+        'webClientConfigured': AppConfig.googleWebClientId.isNotEmpty,
+        'iosClientConfigured': AppConfig.googleIosClientId.isNotEmpty,
+      });
 
       final account = await GoogleSignIn.instance.authenticate();
       final idToken = account.authentication.idToken;
@@ -119,6 +134,10 @@ class SupabaseAuthRepository implements AuthRepository {
       }
 
       final profile = await _ensureProfile(fullName: account.displayName);
+      appLogger.info('google_sign_in_succeeded', {
+        'hasEmail': user.email != null,
+        'hasProfile': profile.id.isNotEmpty,
+      });
       return AuthState(
         status: AuthStatus.authenticated,
         user: AppUser(id: user.id, email: user.email),
@@ -194,11 +213,14 @@ class SupabaseAuthRepository implements AuthRepository {
   Future<void> signOut() async {
     if (!AppConfig.isSupabaseConfigured) return;
     await _client.auth.signOut();
-    await GoogleSignIn.instance.signOut();
+    await _safeGoogleSignOut();
   }
 
   Future<void> _ensureGoogleInitialized() {
-    return _googleInitializeFuture ??= GoogleSignIn.instance.initialize(
+    final existing = _googleInitializeFuture;
+    if (existing != null) return existing;
+
+    final initialization = GoogleSignIn.instance.initialize(
       clientId: AppConfig.googleIosClientId.isEmpty
           ? null
           : AppConfig.googleIosClientId,
@@ -206,6 +228,11 @@ class SupabaseAuthRepository implements AuthRepository {
           ? null
           : AppConfig.googleWebClientId,
     );
+    _googleInitializeFuture = initialization;
+    return initialization.catchError((Object error) {
+      _googleInitializeFuture = null;
+      throw error;
+    });
   }
 
   Future<UserProfile> _ensureProfile({String? fullName}) async {
@@ -250,6 +277,39 @@ class SupabaseAuthRepository implements AuthRepository {
     }
   }
 
+  void _assertGoogleConfigured() {
+    final webClientId = AppConfig.googleWebClientId.trim();
+    if (webClientId.isEmpty) {
+      throw const ConfigurationFailure(
+        'Google login is missing GOOGLE_WEB_CLIENT_ID for this build.',
+        code: 'google_web_client_missing',
+      );
+    }
+    if (!webClientId.endsWith('.apps.googleusercontent.com')) {
+      throw const ConfigurationFailure(
+        'Google login has an invalid GOOGLE_WEB_CLIENT_ID value.',
+        code: 'google_web_client_invalid',
+      );
+    }
+  }
+
+  Future<void> _safeGoogleSignOut() async {
+    if (AppConfig.googleWebClientId.isEmpty) return;
+    try {
+      await _ensureGoogleInitialized();
+      await GoogleSignIn.instance.signOut();
+    } on GoogleSignInException catch (error) {
+      appLogger.warn('google_sign_out_ignored', {
+        'code': error.code.name,
+        'hasDescription': error.description?.isNotEmpty ?? false,
+      });
+    } catch (error) {
+      appLogger.warn('google_sign_out_ignored', {
+        'errorType': error.runtimeType.toString(),
+      });
+    }
+  }
+
   Future<T> _mapSupabaseErrors<T>(
     Future<T> Function() action, {
     required String operation,
@@ -258,6 +318,15 @@ class SupabaseAuthRepository implements AuthRepository {
       return await action();
     } on AppFailure {
       rethrow;
+    } on GoogleSignInException catch (error) {
+      final failure = _googleFailureMapper.map(error);
+      appLogger.warn('google_sign_in_error', {
+        'operation': operation,
+        'code': error.code.name,
+        'failureCode': failure.code,
+        'hasDescription': error.description?.isNotEmpty ?? false,
+      });
+      throw failure;
     } on sb.AuthException catch (error) {
       appLogger.warn('supabase_auth_error', {
         'operation': operation,

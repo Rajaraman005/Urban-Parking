@@ -8,6 +8,7 @@ import '../../../config/app_providers.dart';
 import '../../../core/utils/app_logger.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../home/presentation/home_nearby_controller.dart';
+import '../../user_setup/presentation/host_setup_launch_controller.dart';
 import '../../user_setup/presentation/user_setup_controller.dart';
 import 'owner_parking_controller.dart';
 
@@ -34,6 +35,9 @@ final ownedParkingLiveSyncProvider = Provider<void>((ref) {
   void queueOwnedRefresh() {
     ownedDebounce?.cancel();
     ownedDebounce = Timer(const Duration(milliseconds: 250), () {
+      ref
+          .read(hostSetupLaunchControllerProvider.notifier)
+          .clearCachedResumeCandidate();
       ref.invalidate(ownedParkingSpacesProvider);
       ref.invalidate(userSetupControllerProvider);
     });

@@ -106,6 +106,101 @@ void main() {
     expect(repository.startedCreateNew, isTrue);
   });
 
+  testWidgets(
+    'host launch does not wait for draft lookup when profile has no draft',
+    (tester) async {
+      final router = _router();
+      final repository = _FakeUserSetupRepository();
+      final resumeLookup = Completer<void>();
+      repository.resumeLookupBarrier = resumeLookup.future;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authControllerProvider.overrideWith(
+              () => _FakeAuthController(
+                _authenticatedState(setupStep: 'profile'),
+              ),
+            ),
+            userSetupRepositoryProvider.overrideWithValue(repository),
+          ],
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Host a parking space'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('Step 1 of 4'), findsOneWidget);
+      expect(repository.startedCreateNew, isTrue);
+
+      resumeLookup.complete();
+    },
+  );
+
+  testWidgets('host launch does not wait for stale profile draft lookup', (
+    tester,
+  ) async {
+    final router = _router();
+    final repository = _FakeUserSetupRepository();
+    final resumeLookup = Completer<void>();
+    repository.resumeLookupBarrier = resumeLookup.future;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authControllerProvider.overrideWith(
+            () => _FakeAuthController(
+              _authenticatedState(
+                hostParkingDraftId: 'stale-draft',
+                setupStep: 'host_photos',
+              ),
+            ),
+          ),
+          userSetupRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Host a parking space'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+
+    expect(find.text('Continue your draft?'), findsNothing);
+    expect(find.text('Step 1 of 4'), findsOneWidget);
+    expect(repository.startedCreateNew, isTrue);
+
+    resumeLookup.complete();
+  });
+
+  testWidgets('instant host launch defers map until after first frame', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          userSetupRepositoryProvider.overrideWithValue(
+            _FakeUserSetupRepository(),
+          ),
+        ],
+        child: const MaterialApp(
+          home: HostSpaceBasicsScreen(instantLaunch: true),
+        ),
+      ),
+    );
+
+    expect(find.text('Step 1 of 4'), findsOneWidget);
+    expect(find.byIcon(Icons.map_outlined), findsOneWidget);
+    expect(find.byTooltip('Use current location'), findsNothing);
+
+    await tester.pump();
+    expect(find.byTooltip('Use current location'), findsOneWidget);
+  });
+
   testWidgets('profile host tile asks before resuming an existing draft', (
     tester,
   ) async {
@@ -134,6 +229,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Continue your draft?'), findsOneWidget);
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.text('Host a parking space'), findsOneWidget);
+    expect(find.text('Step 1 of 4'), findsNothing);
     expect(find.text('Old draft'), findsOneWidget);
     expect(find.text('Continue draft'), findsOneWidget);
     expect(find.text('Start new listing'), findsOneWidget);
@@ -209,6 +307,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Continue your draft?'), findsOneWidget);
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.text('Host a parking space'), findsOneWidget);
+    expect(find.text('Step 1 of 4'), findsNothing);
     expect(find.text('Step 3 of 4'), findsOneWidget);
 
     await tester.tap(find.text('Continue draft'));
@@ -437,6 +538,7 @@ GoRouter _router() {
         path: '/setup/host-basics',
         builder: (_, state) => HostSpaceBasicsScreen(
           createNew: state.uri.queryParameters['new'] == '1',
+          instantLaunch: state.uri.queryParameters['launch'] == 'instant',
         ),
       ),
       GoRoute(
@@ -505,6 +607,7 @@ class _FakeUserSetupRepository implements UserSetupRepository {
        _hasResumeDraft = hasResumeDraft;
 
   Future<void>? createNewBarrier;
+  Future<void>? resumeLookupBarrier;
   HostBasicsDraftUpdate? savedBasics;
   final List<String> searchQueries = [];
   bool _hasResumeDraft;
@@ -524,6 +627,7 @@ class _FakeUserSetupRepository implements UserSetupRepository {
 
   @override
   Future<HostListingDraft?> loadHostDraftResumeCandidate() async {
+    await resumeLookupBarrier;
     return _hasResumeDraft ? _draft : null;
   }
 
@@ -611,6 +715,16 @@ class _FakeUserSetupRepository implements UserSetupRepository {
     required String dob,
   }) async {
     return const UserSetupState(intent: 'host', step: 'host_basics');
+  }
+
+  @override
+  Future<UserSetupState> saveVehicleDetails({
+    String? vehicleMake,
+    String? vehicleModel,
+    required String vehicleRegistration,
+    required String vehicleType,
+  }) async {
+    return const UserSetupState(intent: 'park', step: 'complete');
   }
 
   @override

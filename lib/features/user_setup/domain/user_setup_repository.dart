@@ -16,6 +16,12 @@ abstract interface class UserSetupRepository {
     required String gender,
     required String dob,
   });
+  Future<UserSetupState> saveVehicleDetails({
+    String? vehicleMake,
+    String? vehicleModel,
+    required String vehicleRegistration,
+    required String vehicleType,
+  });
   Future<List<ParkingAddressCandidate>> searchAddress(String query);
   Future<UserSetupState> saveHostBasics(HostBasicsDraftUpdate update);
   Future<UserSetupState> saveHostPricing(HostPricingDraftUpdate update);

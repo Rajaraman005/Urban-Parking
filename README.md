@@ -115,6 +115,19 @@ For Android maps, set this in `.env`:
 GOOGLE_MAPS_API_KEY=your-android-google-maps-api-key
 ```
 
+For Android Google sign-in, `GOOGLE_WEB_CLIENT_ID` must be the web OAuth
+client from the same Google/Firebase project as `google-services.json`, and the
+Android OAuth client must include the SHA-1 for the keystore used by the current
+build. Check the local wiring before testing on device:
+
+```bash
+npm run check:google-auth
+```
+
+If the check reports a SHA-1 mismatch, add the printed SHA-1 to the Android app
+entry for package `com.urbanparking.india` in Google/Firebase, download the
+updated `google-services.json`, and rebuild the app.
+
 ## Verification
 
 ```bash

@@ -18,6 +18,7 @@ class AddressSearchMapPicker<T> extends StatelessWidget {
     required this.suggestions,
     super.key,
     this.enabled = true,
+    this.deferMapPreview = false,
     this.mapHeight = 184,
     this.maxSuggestions = 4,
     this.onClearSearch,
@@ -28,6 +29,7 @@ class AddressSearchMapPicker<T> extends StatelessWidget {
   });
 
   final bool enabled;
+  final bool deferMapPreview;
   final GeoPoint fallbackLocation;
   final bool isLocating;
   final bool isSearching;
@@ -52,13 +54,16 @@ class AddressSearchMapPicker<T> extends StatelessWidget {
     final visibleSuggestions = suggestions
         .take(maxSuggestions)
         .toList(growable: false);
-    final map = AddressMapPreview(
-      fallback: fallbackLocation,
-      height: mapHeight,
-      isLocating: isLocating,
-      location: location,
-      onLocationChanged: onLocationChanged,
-      onUseCurrentLocation: onUseCurrentLocation,
+    final map = RepaintBoundary(
+      child: _DeferredAddressMapPreview(
+        defer: deferMapPreview,
+        fallback: fallbackLocation,
+        height: mapHeight,
+        isLocating: isLocating,
+        location: location,
+        onLocationChanged: onLocationChanged,
+        onUseCurrentLocation: onUseCurrentLocation,
+      ),
     );
     final suggestionList = _AddressSuggestionList<T>(
       onSuggestionSelected: onSuggestionSelected,
@@ -91,6 +96,86 @@ class AddressSearchMapPicker<T> extends StatelessWidget {
           suggestionList,
         ],
       ],
+    );
+  }
+}
+
+class _DeferredAddressMapPreview extends StatefulWidget {
+  const _DeferredAddressMapPreview({
+    required this.defer,
+    required this.fallback,
+    required this.height,
+    required this.isLocating,
+    required this.location,
+    required this.onLocationChanged,
+    required this.onUseCurrentLocation,
+  });
+
+  final bool defer;
+  final GeoPoint fallback;
+  final double height;
+  final bool isLocating;
+  final GeoPoint? location;
+  final ValueChanged<GeoPoint> onLocationChanged;
+  final VoidCallback onUseCurrentLocation;
+
+  @override
+  State<_DeferredAddressMapPreview> createState() =>
+      _DeferredAddressMapPreviewState();
+}
+
+class _DeferredAddressMapPreviewState
+    extends State<_DeferredAddressMapPreview> {
+  bool _showMap = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.defer) {
+      _showMap = true;
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _showMap = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_showMap) {
+      return _MapPreviewSkeleton(height: widget.height);
+    }
+
+    return AddressMapPreview(
+      fallback: widget.fallback,
+      height: widget.height,
+      isLocating: widget.isLocating,
+      location: widget.location,
+      onLocationChanged: widget.onLocationChanged,
+      onUseCurrentLocation: widget.onUseCurrentLocation,
+    );
+  }
+}
+
+class _MapPreviewSkeleton extends StatelessWidget {
+  const _MapPreviewSkeleton({required this.height});
+
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFEDEFF3),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: SizedBox(
+        height: height,
+        child: const Center(
+          child: Icon(Icons.map_outlined, color: Color(0xFF71717A), size: 32),
+        ),
+      ),
     );
   }
 }

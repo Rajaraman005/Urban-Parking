@@ -38,7 +38,10 @@ class ParkingRepositoryImpl implements ParkingRepository {
         serviceType: ServiceType.parking,
       ),
     );
-    final spots = page.items.map(ParkingSpot.fromDiscoveryEntity).toList();
+    final spots = page.items
+        .map(ParkingSpot.fromDiscoveryEntity)
+        .map(_publicSafeFallback)
+        .toList();
     _parkingSpotCache.upsertMany(spots);
     return spots;
   }
@@ -57,12 +60,12 @@ class ParkingRepositoryImpl implements ParkingRepository {
       _parkingSpotCache.upsert(spot);
       return spot;
     } on DioException {
-      if (cached != null) return cached;
+      if (cached != null) return _publicSafeFallback(cached);
       final discovered = await _findByDiscovery(id);
       if (discovered != null) return discovered;
       throw Exception('Parking spot not found.');
     } catch (_) {
-      if (cached != null) return cached;
+      if (cached != null) return _publicSafeFallback(cached);
       final discovered = await _findByDiscovery(id);
       if (discovered != null) return discovered;
       throw Exception('Parking spot not found.');
@@ -176,6 +179,7 @@ class ParkingRepositoryImpl implements ParkingRepository {
       final match = page.items
           .where((item) => item.id == id)
           .map(ParkingSpot.fromDiscoveryEntity)
+          .map(_publicSafeFallback)
           .firstOrNull;
       if (match != null) {
         _parkingSpotCache.upsert(match);
@@ -184,6 +188,10 @@ class ParkingRepositoryImpl implements ParkingRepository {
     } catch (_) {
       return null;
     }
+  }
+
+  ParkingSpot _publicSafeFallback(ParkingSpot spot) {
+    return spot.copyWith(clearHostPhone: true);
   }
 
   BookingQuote _localQuoteFor({

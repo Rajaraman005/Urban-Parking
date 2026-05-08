@@ -9,6 +9,7 @@
     "devices": "flutter devices",
     "ios": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/flutter_with_env.ps1 run --device-id ios",
     "doctor": "flutter doctor -v",
+    "check:google-auth": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check_google_auth_config.ps1",
     "pub:get": "flutter pub get",
     "format": "dart format lib test docs",
     "format:check": "dart format --set-exit-if-changed lib test",

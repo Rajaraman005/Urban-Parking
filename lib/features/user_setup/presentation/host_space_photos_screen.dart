@@ -1,13 +1,11 @@
-import 'dart:typed_data';
-import 'dart:ui' as ui;
-
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/errors/app_failure.dart';
+import '../../../shared/media/photo_crop/photo_crop.dart';
 import '../../../shared/widgets/app_screen.dart';
 import '../../../shared/widgets/app_toast.dart';
 import '../../../shared/widgets/state_view.dart';
@@ -25,7 +23,6 @@ class HostSpacePhotosScreen extends ConsumerStatefulWidget {
 
 class _HostSpacePhotosScreenState extends ConsumerState<HostSpacePhotosScreen> {
   static const _maxPhotoCount = 5;
-  static const _maxUploadPhotoBytes = 9.5 * 1024 * 1024;
   static const _pickerImageQuality = 96;
 
   final _imagePicker = ImagePicker();
@@ -132,34 +129,39 @@ class _HostSpacePhotosScreenState extends ConsumerState<HostSpacePhotosScreen> {
                     for (var index = 0; index < photos.length; index++)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: _PhotoTile(
-                          canMoveDown:
-                              index < photos.length - 1 &&
-                              !_isReordering &&
-                              !_isUploading,
-                          canMoveUp:
-                              index > 0 && !_isReordering && !_isUploading,
-                          deleting: _deletingPhotoId == photos[index].id,
-                          onDelete: _isUploading
-                              ? null
-                              : () => _deletePhoto(photos[index]),
-                          onMoveDown: () =>
-                              _movePhoto(photos, index, index + 1),
-                          onMoveUp: () => _movePhoto(photos, index, index - 1),
-                          photo: photos[index],
+                        child: RepaintBoundary(
+                          child: _PhotoTile(
+                            canMoveDown:
+                                index < photos.length - 1 &&
+                                !_isReordering &&
+                                !_isUploading,
+                            canMoveUp:
+                                index > 0 && !_isReordering && !_isUploading,
+                            deleting: _deletingPhotoId == photos[index].id,
+                            onDelete: _isUploading
+                                ? null
+                                : () => _deletePhoto(photos[index]),
+                            onMoveDown: () =>
+                                _movePhoto(photos, index, index + 1),
+                            onMoveUp: () =>
+                                _movePhoto(photos, index, index - 1),
+                            photo: photos[index],
+                          ),
                         ),
                       ),
                     for (final pendingPhoto in _pendingPhotos)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: _PendingPhotoTile(
-                          onEdit: _isUploading || _isPreparingPhotos
-                              ? null
-                              : () => _showPhotoEditOptions(pendingPhoto),
-                          onRemove: _isUploading || _isPreparingPhotos
-                              ? null
-                              : () => _removePendingPhoto(pendingPhoto.id),
-                          photo: pendingPhoto,
+                        child: RepaintBoundary(
+                          child: _PendingPhotoTile(
+                            onEdit: _isUploading || _isPreparingPhotos
+                                ? null
+                                : () => _showPhotoEditOptions(pendingPhoto),
+                            onRemove: _isUploading || _isPreparingPhotos
+                                ? null
+                                : () => _removePendingPhoto(pendingPhoto.id),
+                            photo: pendingPhoto,
+                          ),
                         ),
                       ),
                     if (remainingSlots > 0)
@@ -340,27 +342,49 @@ class _HostSpacePhotosScreenState extends ConsumerState<HostSpacePhotosScreen> {
       );
     }
 
-    final stagedPhotos = <_PendingHostPhoto>[];
+    final sources = <PhotoCropSource>[];
     var failedCount = 0;
     setState(() => _isPreparingPhotos = true);
     try {
       for (final pickedPhoto in stageQueue) {
         try {
-          stagedPhotos.add(await _pendingPhotoFromPickedImage(pickedPhoto));
+          sources.add(
+            await PhotoCropEngine.sourceFromXFile(
+              pickedPhoto,
+              config: PhotoCropConfig.hostPhoto(),
+              fallbackFileName: 'parking-space.jpg',
+              pickerMaxDimension: 2600,
+            ),
+          );
         } catch (_) {
           failedCount += 1;
         }
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _pendingPhotos.addAll(stagedPhotos);
-          _isPreparingPhotos = false;
-        });
+        setState(() => _isPreparingPhotos = false);
       }
     }
 
     if (!mounted) return;
+    if (sources.isEmpty) {
+      if (failedCount > 0) {
+        AppToast.error(context, '$failedCount photo could not be prepared.');
+      }
+      return;
+    }
+
+    final reviewed = await openPhotoReviewTray(
+      context: context,
+      config: PhotoCropConfig.hostPhoto(),
+      sources: sources,
+    );
+    if (!mounted || reviewed == null || reviewed.isEmpty) return;
+
+    final stagedPhotos = reviewed
+        .map(_pendingPhotoFromResult)
+        .toList(growable: false);
+    setState(() => _pendingPhotos.addAll(stagedPhotos));
     if (stagedPhotos.isNotEmpty) {
       AppToast.info(context, '${_photoWord(stagedPhotos.length)} ready');
     }
@@ -369,12 +393,31 @@ class _HostSpacePhotosScreenState extends ConsumerState<HostSpacePhotosScreen> {
     }
   }
 
-  Future<_PendingHostPhoto> _pendingPhotoFromPickedImage(XFile picked) async {
-    final candidate = await _candidateFromPickedImage(picked);
+  _PendingHostPhoto _pendingPhotoFromResult(CroppedPhotoResult result) {
+    final candidate = _candidateFromResult(result);
     return _PendingHostPhoto(
       candidate: candidate,
-      id: '${DateTime.now().microsecondsSinceEpoch}-${picked.name}',
-      originalCandidate: candidate,
+      id: '${DateTime.now().microsecondsSinceEpoch}-${result.fileName}',
+    );
+  }
+
+  HostPhotoUploadCandidate _candidateFromResult(CroppedPhotoResult result) {
+    return HostPhotoUploadCandidate(
+      bytes: result.bytes,
+      fileName: result.fileName,
+      height: result.height,
+      mimeType: result.mimeType,
+      width: result.width,
+    );
+  }
+
+  PhotoCropSource _sourceFromCandidate(HostPhotoUploadCandidate candidate) {
+    return PhotoCropSource(
+      bytes: candidate.bytes,
+      fileName: candidate.fileName,
+      height: candidate.height,
+      mimeType: candidate.mimeType,
+      width: candidate.width,
     );
   }
 
@@ -484,292 +527,20 @@ class _HostSpacePhotosScreenState extends ConsumerState<HostSpacePhotosScreen> {
     return true;
   }
 
-  Future<HostPhotoUploadCandidate> _candidateFromPickedImage(
-    XFile picked,
-  ) async {
-    var bytes = await picked.readAsBytes();
-    var mimeType = picked.mimeType ?? _mimeTypeForName(picked.name);
-    var fileName = picked.name.isEmpty ? 'parking-space.jpg' : picked.name;
-
-    if (bytes.length > _maxUploadPhotoBytes || _shouldNormalizeMime(mimeType)) {
-      bytes = await _compressForUpload(bytes);
-      mimeType = 'image/jpeg';
-      fileName = '${_fileStem(fileName)}.jpg';
-    }
-
-    if (bytes.length > _maxUploadPhotoBytes) {
-      throw const ValidationFailure(
-        'This photo could not be optimized. Try a different photo.',
-        code: 'host_photo_optimize_failed',
-      );
-    }
-
-    final dimensions = await _decodeImageSize(bytes);
-    return HostPhotoUploadCandidate(
-      bytes: bytes,
-      fileName: fileName,
-      height: dimensions.height.round(),
-      mimeType: mimeType,
-      width: dimensions.width.round(),
-    );
-  }
-
-  bool _shouldNormalizeMime(String mimeType) {
-    final normalized = mimeType.toLowerCase();
-    return normalized == 'image/heic' || normalized == 'image/heif';
-  }
-
-  Future<Uint8List> _compressForUpload(Uint8List bytes) async {
-    const profiles = [
-      (maxDimension: 2600, quality: 88),
-      (maxDimension: 2200, quality: 82),
-      (maxDimension: 1800, quality: 76),
-      (maxDimension: 1500, quality: 70),
-      (maxDimension: 1200, quality: 64),
-      (maxDimension: 1000, quality: 58),
-      (maxDimension: 850, quality: 52),
-      (maxDimension: 720, quality: 46),
-    ];
-
-    Uint8List best = bytes;
-    for (final profile in profiles) {
-      final compressed = await FlutterImageCompress.compressWithList(
-        best,
-        format: CompressFormat.jpeg,
-        minHeight: profile.maxDimension,
-        minWidth: profile.maxDimension,
-        quality: profile.quality,
-      );
-      if (compressed.isEmpty) continue;
-      best = compressed;
-      if (best.length <= _maxUploadPhotoBytes) break;
-    }
-    return best;
-  }
-
-  Future<Size> _decodeImageSize(Uint8List bytes) async {
-    final codec = await ui.instantiateImageCodec(bytes);
-    final frame = await codec.getNextFrame();
-    final image = frame.image;
-    try {
-      return Size(image.width.toDouble(), image.height.toDouble());
-    } finally {
-      image.dispose();
-    }
-  }
-
   Future<void> _showPhotoEditOptions(_PendingHostPhoto photo) async {
-    final action = await showModalBottomSheet<_PhotoEditAction>(
+    final reviewed = await openPhotoReviewTray(
       context: context,
-      backgroundColor: Colors.white,
-      showDragHandle: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.crop_square_rounded),
-                  minLeadingWidth: 28,
-                  onTap: () => Navigator.of(
-                    context,
-                  ).pop(const _PhotoEditAction.crop(_PhotoCropPreset.square)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  title: const Text(
-                    'Square crop',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.crop_16_9_rounded),
-                  minLeadingWidth: 28,
-                  onTap: () => Navigator.of(context).pop(
-                    const _PhotoEditAction.crop(_PhotoCropPreset.landscape),
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  title: const Text(
-                    'Landscape crop',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.crop_portrait_rounded),
-                  minLeadingWidth: 28,
-                  onTap: () => Navigator.of(
-                    context,
-                  ).pop(const _PhotoEditAction.crop(_PhotoCropPreset.portrait)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  title: const Text(
-                    'Portrait crop',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.restart_alt_rounded),
-                  minLeadingWidth: 28,
-                  onTap: () =>
-                      Navigator.of(context).pop(const _PhotoEditAction.reset()),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  title: const Text(
-                    'Reset photo',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      config: PhotoCropConfig.hostPhoto(),
+      sources: [_sourceFromCandidate(photo.candidate)],
     );
-    if (!mounted || action == null) return;
-
-    switch (action) {
-      case _CropPhotoEditAction(:final preset):
-        await _applyPendingCrop(photo, preset);
-      case _ResetPhotoEditAction():
-        _resetPendingPhoto(photo);
-    }
-  }
-
-  Future<void> _applyPendingCrop(
-    _PendingHostPhoto photo,
-    _PhotoCropPreset preset,
-  ) async {
-    setState(() => _isPreparingPhotos = true);
-    try {
-      final nextCandidate = await _centerCropCandidate(
-        photo.originalCandidate,
-        preset.aspectRatio,
-      );
-      if (!mounted) return;
-      setState(() {
-        final index = _pendingPhotos.indexWhere(
-          (entry) => entry.id == photo.id,
-        );
-        if (index != -1) {
-          _pendingPhotos[index] = photo.copyWith(candidate: nextCandidate);
-        }
-      });
-    } catch (error) {
-      if (mounted) AppToast.error(context, _errorMessage(error));
-    } finally {
-      if (mounted) setState(() => _isPreparingPhotos = false);
-    }
-  }
-
-  void _resetPendingPhoto(_PendingHostPhoto photo) {
+    if (!mounted || reviewed == null || reviewed.isEmpty) return;
+    final nextCandidate = _candidateFromResult(reviewed.first);
     setState(() {
       final index = _pendingPhotos.indexWhere((entry) => entry.id == photo.id);
       if (index != -1) {
-        _pendingPhotos[index] = photo.copyWith(
-          candidate: photo.originalCandidate,
-        );
+        _pendingPhotos[index] = photo.copyWith(candidate: nextCandidate);
       }
     });
-  }
-
-  Future<HostPhotoUploadCandidate> _centerCropCandidate(
-    HostPhotoUploadCandidate candidate,
-    double aspectRatio,
-  ) async {
-    final codec = await ui.instantiateImageCodec(candidate.bytes);
-    final frame = await codec.getNextFrame();
-    final source = frame.image;
-    try {
-      final sourceRatio = source.width / source.height;
-      late final Rect sourceRect;
-      if (sourceRatio > aspectRatio) {
-        final cropWidth = source.height * aspectRatio;
-        sourceRect = Rect.fromLTWH(
-          (source.width - cropWidth) / 2,
-          0,
-          cropWidth,
-          source.height.toDouble(),
-        );
-      } else {
-        final cropHeight = source.width / aspectRatio;
-        sourceRect = Rect.fromLTWH(
-          0,
-          (source.height - cropHeight) / 2,
-          source.width.toDouble(),
-          cropHeight,
-        );
-      }
-
-      const maxOutputDimension = 2400.0;
-      final largestSourceSide = sourceRect.width > sourceRect.height
-          ? sourceRect.width
-          : sourceRect.height;
-      final scale = largestSourceSide > maxOutputDimension
-          ? maxOutputDimension / largestSourceSide
-          : 1.0;
-      final outputWidth = (sourceRect.width * scale)
-          .round()
-          .clamp(1, 10000)
-          .toInt();
-      final outputHeight = (sourceRect.height * scale)
-          .round()
-          .clamp(1, 10000)
-          .toInt();
-      final recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder);
-      canvas.drawImageRect(
-        source,
-        sourceRect,
-        Rect.fromLTWH(0, 0, outputWidth.toDouble(), outputHeight.toDouble()),
-        Paint()..filterQuality = FilterQuality.high,
-      );
-      final picture = recorder.endRecording();
-      final croppedImage = await picture.toImage(outputWidth, outputHeight);
-      try {
-        final pngBytes = await croppedImage.toByteData(
-          format: ui.ImageByteFormat.png,
-        );
-        if (pngBytes == null) {
-          throw const ValidationFailure(
-            'Could not edit this photo.',
-            code: 'host_photo_edit_failed',
-          );
-        }
-        final jpegBytes = await _compressForUpload(
-          pngBytes.buffer.asUint8List(
-            pngBytes.offsetInBytes,
-            pngBytes.lengthInBytes,
-          ),
-        );
-        if (jpegBytes.length > _maxUploadPhotoBytes) {
-          throw const ValidationFailure(
-            'This edit is too large. Try a smaller crop.',
-            code: 'host_photo_edit_too_large',
-          );
-        }
-        return HostPhotoUploadCandidate(
-          bytes: jpegBytes,
-          fileName: '${_fileStem(candidate.fileName)}.jpg',
-          height: outputHeight,
-          mimeType: 'image/jpeg',
-          width: outputWidth,
-        );
-      } finally {
-        croppedImage.dispose();
-        picture.dispose();
-      }
-    } finally {
-      source.dispose();
-    }
   }
 
   Future<void> _deletePhoto(HostListingPhoto photo) async {
@@ -834,20 +605,6 @@ class _HostSpacePhotosScreenState extends ConsumerState<HostSpacePhotosScreen> {
     }
   }
 
-  String _mimeTypeForName(String name) {
-    final lower = name.toLowerCase();
-    if (lower.endsWith('.heic')) return 'image/heic';
-    if (lower.endsWith('.heif')) return 'image/heif';
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.webp')) return 'image/webp';
-    return 'image/jpeg';
-  }
-
-  String _fileStem(String name) {
-    final dot = name.lastIndexOf('.');
-    return dot <= 0 ? 'parking-space' : name.substring(0, dot);
-  }
-
   String? get _uploadStatusLabel {
     if (!_isUploading) return null;
     if (_totalUploadCount <= 1) return 'Uploading photo';
@@ -860,55 +617,21 @@ class _HostSpacePhotosScreenState extends ConsumerState<HostSpacePhotosScreen> {
   }
 
   String _errorMessage(Object error) {
+    if (error is PhotoCropException) return error.message;
     if (error is AppFailure) return error.message;
     return 'Something went wrong. Please try again.';
   }
 }
 
 class _PendingHostPhoto {
-  const _PendingHostPhoto({
-    required this.candidate,
-    required this.id,
-    required this.originalCandidate,
-  });
+  const _PendingHostPhoto({required this.candidate, required this.id});
 
   final HostPhotoUploadCandidate candidate;
   final String id;
-  final HostPhotoUploadCandidate originalCandidate;
 
   _PendingHostPhoto copyWith({HostPhotoUploadCandidate? candidate}) {
-    return _PendingHostPhoto(
-      candidate: candidate ?? this.candidate,
-      id: id,
-      originalCandidate: originalCandidate,
-    );
+    return _PendingHostPhoto(candidate: candidate ?? this.candidate, id: id);
   }
-}
-
-enum _PhotoCropPreset {
-  square(1),
-  landscape(4 / 3),
-  portrait(3 / 4);
-
-  const _PhotoCropPreset(this.aspectRatio);
-
-  final double aspectRatio;
-}
-
-sealed class _PhotoEditAction {
-  const factory _PhotoEditAction.crop(_PhotoCropPreset preset) =
-      _CropPhotoEditAction;
-  const factory _PhotoEditAction.reset() = _ResetPhotoEditAction;
-}
-
-class _CropPhotoEditAction implements _PhotoEditAction {
-  const _CropPhotoEditAction(this.preset);
-
-  final _PhotoCropPreset preset;
-}
-
-class _ResetPhotoEditAction implements _PhotoEditAction {
-  const _ResetPhotoEditAction();
 }
 
 class _PendingPhotoTile extends StatelessWidget {
@@ -1263,10 +986,25 @@ class _PhotoTile extends StatelessWidget {
             SizedBox(
               width: 104,
               height: 92,
-              child: Image.network(
-                photo.secureUrl,
+              child: CachedNetworkImage(
+                imageUrl: photo.secureUrl,
                 fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const ColoredBox(
+                fadeInDuration: Duration.zero,
+                memCacheHeight: (92 * MediaQuery.devicePixelRatioOf(context))
+                    .round(),
+                memCacheWidth: (104 * MediaQuery.devicePixelRatioOf(context))
+                    .round(),
+                placeholder: (_, _) => const ColoredBox(
+                  color: Color(0xFFF3F4F6),
+                  child: Center(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2.1),
+                    ),
+                  ),
+                ),
+                errorWidget: (_, _, _) => const ColoredBox(
                   color: Color(0xFFF3F4F6),
                   child: Icon(Icons.broken_image_outlined),
                 ),

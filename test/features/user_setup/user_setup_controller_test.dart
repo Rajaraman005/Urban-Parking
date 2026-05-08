@@ -130,6 +130,33 @@ void main() {
     expect(state.step, 'complete');
     expect(state.draft?.status, 'pending_review');
   });
+
+  test('renter setup completes only after vehicle details are saved', () async {
+    final container = _container();
+    addTearDown(container.dispose);
+
+    await container.read(userSetupControllerProvider.future);
+    final controller = container.read(userSetupControllerProvider.notifier);
+
+    var state = await controller.saveIntent('park');
+    expect(state.step, 'profile');
+
+    state = await controller.saveProfile(
+      fullName: 'Test Renter',
+      phone: '9876543210',
+      gender: 'male',
+      dob: '01/01/1990',
+    );
+    expect(state.step, 'vehicle_details');
+
+    state = await controller.saveVehicleDetails(
+      vehicleMake: 'Honda',
+      vehicleModel: 'Activa',
+      vehicleRegistration: 'TN09AB1234',
+      vehicleType: 'bike',
+    );
+    expect(state.step, 'complete');
+  });
 }
 
 ProviderContainer _container() {
@@ -200,7 +227,20 @@ class _FakeUserSetupRepository implements UserSetupRepository {
     required String gender,
     required String dob,
   }) async {
-    _state = _state.copyWith(step: 'host_basics');
+    _state = _state.copyWith(
+      step: _state.intent == 'host' ? 'host_basics' : 'vehicle_details',
+    );
+    return _state;
+  }
+
+  @override
+  Future<UserSetupState> saveVehicleDetails({
+    String? vehicleMake,
+    String? vehicleModel,
+    required String vehicleRegistration,
+    required String vehicleType,
+  }) async {
+    _state = const UserSetupState(intent: 'park', step: 'complete');
     return _state;
   }
 

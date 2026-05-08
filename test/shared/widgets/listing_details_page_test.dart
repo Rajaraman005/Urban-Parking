@@ -65,4 +65,32 @@ void main() {
     expect(find.byType(PageView), findsOneWidget);
     expect(find.byType(AnimatedContainer), findsNWidgets(2));
   });
+
+  testWidgets('empty hero does not show a fake default property photo', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ListingDetailsPage(
+          address: 'Ambasamudram, Tirunelveli, Tamil Nadu',
+          description: 'Verified parking space with secure access.',
+          heroImageUrls: const [],
+          onBack: () {},
+          onPrimaryAction: () {},
+          priceText: 'Rs50/hr',
+          primaryActionLabel: 'Book Now',
+          stats: const [
+            ListingDetailStat('1 Garage'),
+            ListingDetailStat('Hourly'),
+          ],
+          title: 'Car parking',
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.byType(PageView), findsNothing);
+    expect(find.byIcon(Icons.image_not_supported_outlined), findsOneWidget);
+  });
 }

@@ -22,7 +22,14 @@ enum TelemetryEvent {
   geoSearchSucceeded('geo_search_succeeded'),
   geoSearchFailed('geo_search_failed'),
   geoCursorInvalidated('geo_cursor_invalidated'),
-  geoResultsRendered('geo_results_rendered');
+  geoResultsRendered('geo_results_rendered'),
+  hostLaunchTapped('host_launch_tap'),
+  hostLaunchRouteVisible('host_launch_route_visible'),
+  hostLaunchFirstFrame('host_launch_first_frame'),
+  hostLaunchHydrationStarted('host_launch_hydration_started'),
+  hostLaunchResumeAvailable('host_launch_resume_available'),
+  hostLaunchDraftReady('host_launch_draft_ready'),
+  hostLaunchFailed('host_launch_failed');
 
   const TelemetryEvent(this.name);
   final String name;

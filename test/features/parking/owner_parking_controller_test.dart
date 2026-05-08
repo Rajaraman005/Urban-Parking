@@ -73,7 +73,10 @@ void main() {
         .deleteListing(_spotId);
 
     expect(ownerRepository.deletedSpotIds, [_spotId]);
-    expect(container.read(parkingListingSnapshotProvider(_spotId)), isNull);
+    expect(
+      container.read(parkingListingSnapshotProvider(_spotId))?.isDeleted,
+      isTrue,
+    );
   });
 }
 

@@ -22,7 +22,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   static const _primaryActionColor = Color(0xFF070708);
   static const _secondaryBorderColor = Color(0xFF171719);
   static const _legalTextColor = Color(0xFF565656);
-  static const _buttonHeight = 52.0;
+  static const _legalLinkColor = Color(0xFF141416);
+  static const _buttonHeight = 44.0;
+  static const _buttonMaxWidth = 304.0;
   static const _autoPlayInterval = Duration(milliseconds: 4200);
   static const _slideDuration = Duration(milliseconds: 820);
   static const _systemUiStyle = SystemUiOverlayStyle(
@@ -155,34 +157,47 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      SizedBox(
-                        width: double.infinity,
-                        height: _buttonHeight,
-                        child: FilledButton.icon(
-                          style: _primaryActionButtonStyle,
-                          onPressed: () => context.go('/auth?mode=signup'),
-                          icon: const Icon(
-                            Icons.person_add_alt_1_rounded,
-                            size: 20,
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: _buttonMaxWidth,
+                        ),
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: _buttonHeight,
+                          child: FilledButton.icon(
+                            style: _primaryActionButtonStyle,
+                            onPressed: () => context.go('/auth?mode=signup'),
+                            icon: const Icon(
+                              Icons.person_add_alt_1_rounded,
+                              size: 18,
+                            ),
+                            label: const Text('Create account'),
                           ),
-                          label: const Text('Create account'),
                         ),
                       ),
                       const SizedBox(height: 12),
                       const _ActionDivider(),
                       const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        height: _buttonHeight,
-                        child: OutlinedButton.icon(
-                          style: _secondaryActionButtonStyle,
-                          onPressed: () => context.go('/auth?mode=login'),
-                          icon: const Icon(Icons.login_rounded, size: 20),
-                          label: const Text('Log in'),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: _buttonMaxWidth,
+                        ),
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: _buttonHeight,
+                          child: OutlinedButton.icon(
+                            style: _secondaryActionButtonStyle,
+                            onPressed: () => context.go('/auth?mode=login'),
+                            icon: const Icon(Icons.login_rounded, size: 18),
+                            label: const Text('Log in'),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 18),
-                      const LegalConsentText(textColor: _legalTextColor),
+                      const LegalConsentText(
+                        textColor: _legalTextColor,
+                        linkColor: _legalLinkColor,
+                      ),
                     ],
                   ),
                 ),
@@ -203,9 +218,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     padding: EdgeInsets.zero,
     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
     visualDensity: VisualDensity.compact,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
     textStyle: const TextStyle(
-      fontSize: 15,
+      fontSize: 14,
       fontWeight: FontWeight.w900,
       height: 1,
     ),
@@ -222,9 +237,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         visualDensity: VisualDensity.compact,
         side: const BorderSide(color: _secondaryBorderColor, width: 1.3),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
         textStyle: const TextStyle(
-          fontSize: 15,
+          fontSize: 14,
           fontWeight: FontWeight.w900,
           height: 1,
         ),

@@ -5,6 +5,7 @@ import '../features/auth/presentation/auth_screen.dart';
 import '../features/auth/presentation/password_reset_screen.dart';
 import '../features/booking/presentation/booking_screen.dart';
 import '../features/booking/presentation/booking_schedule_screen.dart';
+import '../features/booking/presentation/host_booking_requests_screen.dart';
 import '../features/home/presentation/home_screen.dart';
 import '../features/legal/data/legal_documents.dart';
 import '../features/legal/presentation/legal_document_screen.dart';
@@ -12,6 +13,7 @@ import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/parking/presentation/search_screen.dart';
 import '../features/parking/presentation/owned_parking_screen.dart';
 import '../features/profile/presentation/personal_details_screen.dart';
+import '../features/profile/presentation/privacy_booking_controls_screen.dart';
 import '../features/profile/presentation/profile_screen.dart';
 import '../features/rental/presentation/rental_screen.dart';
 import '../features/services/presentation/services_screen.dart';
@@ -50,9 +52,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const UserSetupProfileScreen(),
       ),
       GoRoute(
+        path: '/setup/vehicle',
+        builder: (context, state) => const UserSetupVehicleScreen(),
+      ),
+      GoRoute(
         path: '/setup/host-basics',
         builder: (context, state) => HostSpaceBasicsScreen(
           createNew: state.uri.queryParameters['new'] == '1',
+          instantLaunch: state.uri.queryParameters['launch'] == 'instant',
         ),
       ),
       GoRoute(
@@ -96,6 +103,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/profile/personal-details',
             builder: (context, state) => const PersonalDetailsScreen(),
+          ),
+          GoRoute(
+            path: '/profile/privacy-booking-controls',
+            builder: (context, state) => const PrivacyBookingControlsScreen(),
+          ),
+          GoRoute(
+            path: '/profile/booking-requests',
+            builder: (context, state) => const HostBookingRequestsScreen(),
           ),
           GoRoute(
             path: '/profile/my-spaces',

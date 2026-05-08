@@ -7,6 +7,8 @@ import 'package:uuid/uuid.dart';
 import '../../../config/app_config.dart';
 import '../../../core/errors/app_failure.dart';
 import '../../../core/utils/telemetry.dart';
+import '../../../shared/validation/indian_mobile_number.dart';
+import '../../../shared/validation/indian_vehicle_registration.dart';
 import '../../parking/domain/owner_parking_repository.dart';
 import '../../parking/domain/parking_availability.dart';
 import '../domain/user_setup_repository.dart';
@@ -45,15 +47,20 @@ class UserSetupRepositoryImpl implements UserSetupRepository {
 
     try {
       final profile = await _ensureProfile();
-      final profileStep = _validHostStep(_stringFrom(profile, 'setup_step'));
+      final rawProfileStep = _stringFrom(profile, 'setup_step');
+      final profileStep = _validHostStep(rawProfileStep);
       final draftId =
           _stringFrom(profile, 'host_parking_draft_id') ??
           _stringFrom(profile, 'setup_draft_id');
-      final draft = draftId == null
+      final loadedDraft = draftId == null
           ? null
           : await _loadListing(draftId, fallbackStep: profileStep);
+      final draft = _isResumableHostDraft(loadedDraft) ? loadedDraft : null;
       final step =
-          _validHostStep(draft?.currentStep) ?? profileStep ?? 'intent';
+          _validHostStep(draft?.currentStep) ??
+          profileStep ??
+          _validSetupStep(rawProfileStep) ??
+          'intent';
       return UserSetupState(
         draft: draft,
         draftId: draft?.id ?? draftId,
@@ -96,18 +103,25 @@ class UserSetupRepositoryImpl implements UserSetupRepository {
       if (seenCandidateKeys.add(key)) candidates.add(draft);
     }
 
-    for (final draftId in profileDraftIds) {
-      final draft = await _loadListing(draftId, fallbackStep: profileStep);
+    final profileDraftsFuture = Future.wait<HostListingDraft?>(
+      profileDraftIds.map(
+        (draftId) => _loadListing(draftId, fallbackStep: profileStep),
+      ),
+    );
+    final latestDraftIdFuture = _latestOwnedHostDraftId();
+    final legacyDraftFuture = _latestLegacyDraft(fallbackStep: profileStep);
+
+    for (final draft in await profileDraftsFuture) {
       addCandidate(draft);
     }
 
-    final latestDraftId = await _latestOwnedHostDraftId();
+    final latestDraftId = await latestDraftIdFuture;
     if (latestDraftId != null && !profileDraftIds.contains(latestDraftId)) {
       final latestDraft = await _loadListing(latestDraftId);
       addCandidate(latestDraft);
     }
 
-    addCandidate(await _latestLegacyDraft(fallbackStep: profileStep));
+    addCandidate(await legacyDraftFuture);
     return _bestResumeDraft(candidates);
   }
 
@@ -176,24 +190,114 @@ class UserSetupRepositoryImpl implements UserSetupRepository {
     final client = _readyClient();
     final profile = await _ensureProfile();
     final intent = _stringFrom(profile, 'intent');
-    final nextStep = intent == 'host' ? 'host_basics' : 'complete';
+    if (!const {'park', 'host'}.contains(intent)) {
+      throw const ValidationFailure(
+        'Choose how you want to use Urban Parking.',
+        code: 'setup_intent_invalid',
+      );
+    }
+    final nextStep = intent == 'host' ? 'host_basics' : 'vehicle_details';
+    final normalizedFullName = _normalizeProfileName(fullName);
+    final normalizedPhone = _normalizeProfilePhone(phone);
+    final normalizedGender = _normalizeProfileGender(gender);
+    final normalizedDob = _normalizeProfileDob(dob);
 
-    await client
-        .from('profiles')
-        .update({
-          'full_name': fullName.trim(),
-          'phone': phone.trim(),
-          'gender': gender.trim(),
-          'dob': _normalizeDob(dob),
-          'setup_step': nextStep,
-        })
-        .eq('id', client.auth.currentUser!.id);
+    final payload = <String, Object?>{
+      'full_name': normalizedFullName,
+      'phone': normalizedPhone,
+      'gender': normalizedGender,
+      'dob': normalizedDob,
+      'setup_step': nextStep,
+    };
+    try {
+      await client
+          .from('profiles')
+          .update(payload)
+          .eq('id', client.auth.currentUser!.id);
+    } on sb.PostgrestException catch (error) {
+      throw _profileWriteFailure(
+        error,
+        fallbackMessage: 'Could not save your details. Please try again.',
+      );
+    }
     telemetry.event(TelemetryEvent.setupStepSaved, {'step': 'profile'});
 
     return UserSetupState(
       intent: intent,
       step: nextStep,
       message: 'Profile saved',
+    );
+  }
+
+  @override
+  Future<UserSetupState> saveVehicleDetails({
+    String? vehicleMake,
+    String? vehicleModel,
+    required String vehicleRegistration,
+    required String vehicleType,
+  }) async {
+    final client = _readyClient();
+    final profile = await _ensureProfile();
+    final intent = _stringFrom(profile, 'intent');
+    if (intent != 'park') {
+      throw const ValidationFailure(
+        'Vehicle details are required for finding parking.',
+        code: 'vehicle_details_intent_invalid',
+      );
+    }
+
+    final normalizedType = _normalizeVehicleType(vehicleType);
+    final normalizedRegistration = _normalizeVehicleRegistration(
+      vehicleRegistration,
+    );
+    final normalizedMake = _normalizeOptionalVehicleText(
+      vehicleMake,
+      fieldCode: 'vehicle_make',
+      fieldLabel: 'Vehicle make',
+    );
+    final normalizedModel = _normalizeOptionalVehicleText(
+      vehicleModel,
+      fieldCode: 'vehicle_model',
+      fieldLabel: 'Vehicle model',
+    );
+
+    final payload = <String, Object?>{
+      'vehicle_type': normalizedType,
+      'vehicle_registration': normalizedRegistration,
+      'vehicle_make': normalizedMake,
+      'vehicle_model': normalizedModel,
+      'setup_step': 'complete',
+      'onboarding_completed_at': DateTime.now().toUtc().toIso8601String(),
+      'version': _intFrom(profile, 'version', fallback: 1) + 1,
+    };
+
+    try {
+      await client
+          .from('profiles')
+          .update(payload)
+          .eq('id', client.auth.currentUser!.id);
+    } on sb.PostgrestException catch (error) {
+      if (_isVehicleProfileSchemaUnavailable(error)) {
+        throw const ConfigurationFailure(
+          'Vehicle setup is not deployed yet. Apply the latest profile migration.',
+          code: 'vehicle_profile_schema_missing',
+        );
+      }
+      throw _profileWriteFailure(
+        error,
+        fallbackMessage: 'Could not save your vehicle. Please try again.',
+      );
+    }
+
+    telemetry.event(TelemetryEvent.setupStepSaved, {
+      'step': 'vehicle_details',
+      'vehicleType': normalizedType,
+    });
+
+    return const UserSetupState(
+      intent: 'park',
+      step: 'complete',
+      message: 'Vehicle details saved',
     );
   }
 
@@ -1025,6 +1129,60 @@ class UserSetupRepositoryImpl implements UserSetupRepository {
                 text.contains('does not exist'));
   }
 
+  bool _isVehicleProfileSchemaUnavailable(sb.PostgrestException error) {
+    final text = [error.message, error.details, error.hint]
+        .whereType<Object>()
+        .map((value) => value.toString())
+        .join(' ')
+        .toLowerCase();
+    return error.code == 'PGRST204' ||
+        (text.contains('vehicle_') &&
+            (text.contains('schema cache') ||
+                text.contains('could not find') ||
+                text.contains('does not exist')));
+  }
+
+  AppFailure _profileWriteFailure(
+    sb.PostgrestException error, {
+    required String fallbackMessage,
+  }) {
+    final code = error.code ?? 'profile_write_failed';
+    final text = [error.message, error.details, error.hint]
+        .whereType<Object>()
+        .map((value) => value.toString())
+        .join(' ')
+        .toLowerCase();
+
+    if (code == '23514' && text.contains('profiles_setup_step_check')) {
+      return const ConfigurationFailure(
+        'Profile setup database is missing the vehicle-details step. Apply the latest Supabase migrations and try again.',
+        code: 'profile_setup_step_migration_missing',
+      );
+    }
+    if (code == '42703' ||
+        text.contains('schema cache') ||
+        text.contains('could not find') ||
+        text.contains('does not exist')) {
+      return const ConfigurationFailure(
+        'Profile setup database is missing the latest profile columns. Apply the latest Supabase migrations and try again.',
+        code: 'profile_schema_migration_missing',
+      );
+    }
+    if (code == '42501' || text.contains('permission denied')) {
+      return const ConfigurationFailure(
+        'Profile setup permissions are not deployed. Apply the latest Supabase profile grants and try again.',
+        code: 'profile_update_grant_missing',
+      );
+    }
+    if (code == '23514') {
+      return ValidationFailure(
+        error.message.isEmpty ? 'Check your profile details.' : error.message,
+        code: 'profile_constraint_failed',
+      );
+    }
+    return NetworkFailure(fallbackMessage, code: code);
+  }
+
   bool _shouldFallbackToLegacyPhotoUpload(AppFailure error) {
     return error.code == 'host_photo_upload_service_missing' ||
         error.code == 'create-host-parking-photo-upload-signature_404' ||
@@ -1419,6 +1577,18 @@ class UserSetupRepositoryImpl implements UserSetupRepository {
     return _hostSteps.contains(step) ? step : null;
   }
 
+  String? _validSetupStep(String? step) {
+    if (step == null) return null;
+    return const {
+          'intent',
+          'profile',
+          'vehicle_details',
+          'complete',
+        }.contains(step)
+        ? step
+        : null;
+  }
+
   HostListingDraft _draftFromFunctionPayload(
     Map<String, Object?> payload,
     String draftId,
@@ -1797,6 +1967,13 @@ class UserSetupRepositoryImpl implements UserSetupRepository {
     return value == null || value.isEmpty ? null : value;
   }
 
+  int _intFrom(Map<String, Object?> map, String key, {required int fallback}) {
+    final value = map[key];
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value.trim()) ?? fallback;
+    return fallback;
+  }
+
   bool _hasText(String? value) => value != null && value.trim().isNotEmpty;
 
   String? _nullIfBlank(String? value) {
@@ -1832,6 +2009,114 @@ class UserSetupRepositoryImpl implements UserSetupRepository {
       return '${slashMatch.group(3)}-${slashMatch.group(2)}-${slashMatch.group(1)}';
     }
     return text;
+  }
+
+  String _normalizeProfileName(String value) {
+    final normalized = value.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (normalized.length < 2) {
+      throw const ValidationFailure(
+        'Enter your full name.',
+        code: 'profile_full_name_required',
+      );
+    }
+    if (normalized.length > 80) {
+      throw const ValidationFailure(
+        'Name is too long.',
+        code: 'profile_full_name_too_long',
+      );
+    }
+    return normalized;
+  }
+
+  String _normalizeProfilePhone(String value) {
+    final issue = IndianMobileNumber.issue(value);
+    if (issue != null) {
+      throw ValidationFailure(
+        IndianMobileNumber.message(issue),
+        code: 'profile_phone_invalid',
+      );
+    }
+    return IndianMobileNumber.normalize(value)!;
+  }
+
+  String _normalizeProfileGender(String value) {
+    final normalized = value.trim();
+    if (!const {
+      'male',
+      'female',
+      'other',
+      'prefer_not_to_say',
+    }.contains(normalized)) {
+      throw const ValidationFailure(
+        'Choose a valid gender option.',
+        code: 'profile_gender_invalid',
+      );
+    }
+    return normalized;
+  }
+
+  String _normalizeProfileDob(String value) {
+    final normalized = _normalizeDob(value);
+    if (normalized == null) {
+      throw const ValidationFailure(
+        'Choose your date of birth.',
+        code: 'profile_dob_required',
+      );
+    }
+    final parsed = DateTime.tryParse(normalized);
+    if (parsed == null) {
+      throw const ValidationFailure(
+        'Choose a valid date of birth.',
+        code: 'profile_dob_invalid',
+      );
+    }
+    final today = DateTime.now();
+    final date = DateTime(parsed.year, parsed.month, parsed.day);
+    if (date.isAfter(DateTime(today.year, today.month, today.day))) {
+      throw const ValidationFailure(
+        'Date of birth cannot be in the future.',
+        code: 'profile_dob_future',
+      );
+    }
+    return _dateOnly(date);
+  }
+
+  String _normalizeVehicleType(String value) {
+    final normalized = value.trim().toLowerCase();
+    if (!const {'bike', 'car'}.contains(normalized)) {
+      throw const ValidationFailure(
+        'Choose your vehicle type.',
+        code: 'vehicle_type_invalid',
+      );
+    }
+    return normalized;
+  }
+
+  String _normalizeVehicleRegistration(String value) {
+    final issue = IndianVehicleRegistration.issue(value);
+    if (issue != null) {
+      throw ValidationFailure(
+        IndianVehicleRegistration.message(issue),
+        code: 'vehicle_registration_invalid',
+      );
+    }
+    return IndianVehicleRegistration.normalize(value)!;
+  }
+
+  String? _normalizeOptionalVehicleText(
+    String? value, {
+    required String fieldCode,
+    required String fieldLabel,
+  }) {
+    final normalized = value?.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (normalized == null || normalized.isEmpty) return null;
+    if (normalized.length > 40) {
+      throw ValidationFailure(
+        '$fieldLabel is too long.',
+        code: '${fieldCode}_too_long',
+      );
+    }
+    return normalized;
   }
 }
 

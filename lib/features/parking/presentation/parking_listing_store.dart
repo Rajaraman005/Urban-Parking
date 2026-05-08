@@ -25,6 +25,7 @@ class ParkingListingRevision {
 class ParkingListingSnapshot {
   const ParkingListingSnapshot({
     this.error,
+    this.isDeleted = false,
     this.isOptimistic = false,
     this.isRefreshing = false,
     this.lastResolvedAt,
@@ -32,6 +33,7 @@ class ParkingListingSnapshot {
   });
 
   final Object? error;
+  final bool isDeleted;
   final bool isOptimistic;
   final bool isRefreshing;
   final DateTime? lastResolvedAt;
@@ -40,6 +42,7 @@ class ParkingListingSnapshot {
   ParkingListingSnapshot copyWith({
     Object? error,
     bool clearError = false,
+    bool? isDeleted,
     bool? isOptimistic,
     bool? isRefreshing,
     DateTime? lastResolvedAt,
@@ -47,6 +50,7 @@ class ParkingListingSnapshot {
   }) {
     return ParkingListingSnapshot(
       error: clearError ? null : error ?? this.error,
+      isDeleted: isDeleted ?? this.isDeleted,
       isOptimistic: isOptimistic ?? this.isOptimistic,
       isRefreshing: isRefreshing ?? this.isRefreshing,
       lastResolvedAt: lastResolvedAt ?? this.lastResolvedAt,
@@ -73,6 +77,9 @@ final liveParkingSpotProvider = FutureProvider.family<ParkingSpot, String>((
 ) async {
   final snapshot = ref.watch(parkingListingSnapshotProvider(spotId));
   final spot = snapshot?.spot;
+  if (snapshot?.isDeleted == true) {
+    throw StateError('Listing was deleted.');
+  }
   if (spot != null) {
     return spot;
   }
@@ -100,6 +107,9 @@ class ParkingListingStore
   ParkingSpot? spotFor(String spotId) => state[spotId]?.spot;
 
   void seed(ParkingSpot spot) {
+    if (state[spot.id]?.isDeleted == true) {
+      return;
+    }
     final existing = state[spot.id]?.spot;
     if (existing != null && !_isNewer(spot, existing)) {
       return;
@@ -177,6 +187,13 @@ class ParkingListingStore
       next[spotId] = snapshot;
     }
     state = next;
+  }
+
+  void markDeleted(String spotId) {
+    _setSnapshot(
+      spotId,
+      ParkingListingSnapshot(isDeleted: true, lastResolvedAt: DateTime.now()),
+    );
   }
 
   void _setSnapshot(String spotId, ParkingListingSnapshot snapshot) {

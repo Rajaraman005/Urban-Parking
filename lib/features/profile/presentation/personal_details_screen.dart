@@ -1,13 +1,12 @@
-import 'dart:typed_data';
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/errors/app_failure.dart';
+import '../../../shared/media/photo_crop/photo_crop.dart';
+import '../../../shared/validation/indian_mobile_number.dart';
 import '../../../shared/widgets/app_screen.dart';
 import '../../../shared/widgets/app_toast.dart';
 import '../../auth/domain/auth_state.dart';
@@ -53,7 +52,8 @@ class PersonalDetailsScreen extends ConsumerWidget {
               child: Column(
                 children: [
                   _EditableProfilePhoto(
-                    avatarUrl: profile?.avatarUrl,
+                    avatarUrl: displayProfileAvatarUrl(profile),
+                    fullName: name,
                     loading: profileBusy,
                     onEdit: profileBusy
                         ? null
@@ -98,6 +98,35 @@ class PersonalDetailsScreen extends ConsumerWidget {
                         label: 'Date of birth',
                         value: _dateLabel(profile?.dob),
                         muted: profile?.dob == null,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  _DetailsSection(
+                    title: 'Vehicle',
+                    children: [
+                      _DetailRow(
+                        icon: _vehicleIcon(profile?.vehicleType),
+                        label: 'Type',
+                        value: _vehicleTypeLabel(profile?.vehicleType),
+                        muted: _isBlank(profile?.vehicleType),
+                      ),
+                      _DetailRow(
+                        icon: Icons.confirmation_number_outlined,
+                        label: 'Registration',
+                        value: _emptyLabel(profile?.vehicleRegistration),
+                        muted: _isBlank(profile?.vehicleRegistration),
+                      ),
+                      _DetailRow(
+                        icon: Icons.directions_car_outlined,
+                        label: 'Make and model',
+                        value: _vehicleMakeModelLabel(
+                          profile?.vehicleMake,
+                          profile?.vehicleModel,
+                        ),
+                        muted:
+                            _isBlank(profile?.vehicleMake) &&
+                            _isBlank(profile?.vehicleModel),
                       ),
                     ],
                   ),
@@ -215,6 +244,31 @@ class PersonalDetailsScreen extends ConsumerWidget {
     };
   }
 
+  IconData _vehicleIcon(String? type) {
+    return switch (type?.trim()) {
+      'bike' => Icons.two_wheeler_rounded,
+      'car' => Icons.directions_car_filled_rounded,
+      _ => Icons.directions_car_outlined,
+    };
+  }
+
+  String _vehicleTypeLabel(String? type) {
+    return switch (type?.trim()) {
+      'bike' => 'Bike',
+      'car' => 'Car',
+      String value when value.isNotEmpty => value,
+      _ => 'Not added',
+    };
+  }
+
+  String _vehicleMakeModelLabel(String? make, String? model) {
+    final parts = [
+      if (!_isBlank(make)) make!.trim(),
+      if (!_isBlank(model)) model!.trim(),
+    ];
+    return parts.isEmpty ? 'Not added' : parts.join(' ');
+  }
+
   void _openIdentityEditor({
     required AuthState? auth,
     required BuildContext context,
@@ -267,29 +321,30 @@ class PersonalDetailsScreen extends ConsumerWidget {
         return;
       }
 
-      var bytes = await picked.readAsBytes();
-      var mimeType = picked.mimeType ?? _mimeTypeForName(picked.name);
-      var fileName = picked.name.isEmpty ? 'profile-photo.jpg' : picked.name;
+      final config = PhotoCropConfig.avatar();
+      final source = await PhotoCropEngine.sourceFromXFile(
+        picked,
+        config: config,
+        fallbackFileName: 'profile-photo.jpg',
+        pickerMaxDimension: 1800,
+      );
+      if (!context.mounted) return;
 
-      if (bytes.length > 5 * 1024 * 1024) {
-        bytes = await FlutterImageCompress.compressWithList(
-          bytes,
-          format: CompressFormat.jpeg,
-          minHeight: 1200,
-          minWidth: 1200,
-          quality: 86,
-        );
-        mimeType = 'image/jpeg';
-        fileName = '${_fileStem(fileName)}.jpg';
+      final cropped = await openPhotoCropEditor(
+        context: context,
+        config: config,
+        source: source,
+      );
+      if (cropped == null || !context.mounted) {
+        return;
       }
 
-      final dimensions = await _decodeImageSize(bytes);
       final image = ProfileAvatarUploadCandidate(
-        bytes: bytes,
-        fileName: fileName,
-        height: dimensions.height.round(),
-        mimeType: mimeType,
-        width: dimensions.width.round(),
+        bytes: cropped.bytes,
+        fileName: cropped.fileName,
+        height: cropped.height,
+        mimeType: cropped.mimeType,
+        width: cropped.width,
       );
 
       await ref
@@ -306,34 +361,10 @@ class PersonalDetailsScreen extends ConsumerWidget {
     }
   }
 
-  Future<Size> _decodeImageSize(Uint8List bytes) async {
-    final codec = await ui.instantiateImageCodec(bytes);
-    final frame = await codec.getNextFrame();
-    final image = frame.image;
-    try {
-      return Size(image.width.toDouble(), image.height.toDouble());
-    } finally {
-      image.dispose();
-    }
-  }
-
-  String _mimeTypeForName(String name) {
-    final lower = name.toLowerCase();
-    if (lower.endsWith('.png')) {
-      return 'image/png';
-    }
-    if (lower.endsWith('.webp')) {
-      return 'image/webp';
-    }
-    return 'image/jpeg';
-  }
-
-  String _fileStem(String name) {
-    final dot = name.lastIndexOf('.');
-    return dot <= 0 ? 'profile-photo' : name.substring(0, dot);
-  }
-
   String _errorMessage(Object error) {
+    if (error is PhotoCropException) {
+      return error.message;
+    }
     if (error is AppFailure) {
       return error.message;
     }
@@ -395,11 +426,13 @@ class _PersonalDetailsHeader extends StatelessWidget {
 class _EditableProfilePhoto extends StatelessWidget {
   const _EditableProfilePhoto({
     required this.avatarUrl,
+    required this.fullName,
     required this.loading,
     required this.onEdit,
   });
 
   final String? avatarUrl;
+  final String fullName;
   final bool loading;
   final VoidCallback? onEdit;
 
@@ -417,7 +450,12 @@ class _EditableProfilePhoto extends StatelessWidget {
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                Positioned.fill(child: _DetailsAvatar(avatarUrl: avatarUrl)),
+                Positioned.fill(
+                  child: _DetailsAvatar(
+                    avatarUrl: avatarUrl,
+                    fullName: fullName,
+                  ),
+                ),
                 Positioned(
                   right: -1,
                   bottom: -1,
@@ -474,9 +512,10 @@ class _EditableProfilePhoto extends StatelessWidget {
 }
 
 class _DetailsAvatar extends StatelessWidget {
-  const _DetailsAvatar({required this.avatarUrl});
+  const _DetailsAvatar({required this.avatarUrl, required this.fullName});
 
   final String? avatarUrl;
+  final String fullName;
 
   @override
   Widget build(BuildContext context) {
@@ -501,21 +540,36 @@ class _DetailsAvatar extends StatelessWidget {
           ),
           child: ClipOval(
             child: url == null || url.isEmpty
-                ? const Icon(
-                    Icons.person_outline_rounded,
-                    color: Colors.white,
-                    size: 42,
-                  )
+                ? _DetailsInitials(fullName: fullName)
                 : Image.network(
                     url,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const Icon(
-                      Icons.person_outline_rounded,
-                      color: Colors.white,
-                      size: 42,
-                    ),
+                    errorBuilder: (_, _, _) =>
+                        _DetailsInitials(fullName: fullName),
                   ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailsInitials extends StatelessWidget {
+  const _DetailsInitials({required this.fullName});
+
+  final String fullName;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        profileInitials(fullName),
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 28,
+          fontWeight: FontWeight.w900,
+          height: 1,
+          letterSpacing: 0,
         ),
       ),
     );
@@ -645,6 +699,9 @@ class _IdentityEditSheetState extends State<_IdentityEditSheet> {
                   TextField(
                     controller: _phoneController,
                     enabled: !_saving,
+                    inputFormatters: const [
+                      _IndianMobileNumberInputFormatter(),
+                    ],
                     keyboardType: TextInputType.phone,
                     textInputAction: TextInputAction.done,
                     decoration: _inputDecoration('10 digit mobile number'),
@@ -984,6 +1041,22 @@ class _DetailsSection extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _IndianMobileNumberInputFormatter extends TextInputFormatter {
+  const _IndianMobileNumberInputFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final nextText = IndianMobileNumber.inputDigits(newValue.text);
+    return TextEditingValue(
+      text: nextText,
+      selection: TextSelection.collapsed(offset: nextText.length),
     );
   }
 }

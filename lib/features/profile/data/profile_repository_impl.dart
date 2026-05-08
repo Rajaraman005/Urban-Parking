@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../config/app_config.dart';
 import '../../../core/errors/app_failure.dart';
+import '../../../shared/validation/indian_mobile_number.dart';
 import '../../auth/domain/auth_state.dart';
 import '../domain/profile_repository.dart';
 
@@ -90,6 +91,54 @@ class ProfileRepositoryImpl implements ProfileRepository {
   }
 
   @override
+  Future<UserProfile> updateBookingControls(
+    ProfileBookingControlsUpdate update,
+  ) async {
+    _assertConfigured();
+    _assertAuthenticated();
+
+    try {
+      final response = await _client.rpc(
+        'update_profile_booking_controls',
+        params: {
+          'p_booking_approval_mode': update.bookingApprovalMode.name,
+          'p_expected_version': update.expectedVersion,
+          'p_show_phone_number': update.showPhoneNumber,
+        },
+      );
+
+      if (response is Map) {
+        return UserProfile.fromJson(Map<String, Object?>.from(response));
+      }
+
+      throw const AuthFailure(
+        'Profile controls returned an invalid response.',
+        code: 'profile_controls_invalid_response',
+      );
+    } on AppFailure {
+      rethrow;
+    } on sb.PostgrestException catch (error) {
+      final code = error.code ?? 'profile_controls_update_failed';
+      if (code == '40001') {
+        throw const ValidationFailure(
+          'Your profile changed elsewhere. Refresh and try again.',
+          code: 'profile_version_conflict',
+        );
+      }
+      if (code == '23514') {
+        throw const ValidationFailure(
+          'Choose valid privacy controls.',
+          code: 'profile_controls_invalid',
+        );
+      }
+      throw AuthFailure(
+        'Could not update privacy controls. Please try again.',
+        code: code,
+      );
+    }
+  }
+
+  @override
   Future<UserProfile> updateAvatar(ProfileAvatarUploadCandidate image) async {
     _assertConfigured();
     _assertAuthenticated();
@@ -118,6 +167,7 @@ class ProfileRepositoryImpl implements ProfileRepository {
           'file': MultipartFile.fromBytes(
             image.bytes,
             filename: image.fileName,
+            contentType: DioMediaType.parse(image.mimeType),
           ),
           'public_id': _requiredString(signature, 'publicId'),
           'signature': _requiredString(signature, 'signature'),
@@ -238,19 +288,15 @@ class ProfileRepositoryImpl implements ProfileRepository {
       return null;
     }
 
-    final digits = value.replaceAll(RegExp(r'\D'), '');
-    final normalized = digits.length > 10 && digits.startsWith('91')
-        ? digits.substring(2)
-        : digits;
-
-    if (!RegExp(r'^[6-9]\d{9}$').hasMatch(normalized)) {
-      throw const ValidationFailure(
-        'Enter a valid 10 digit Indian mobile number.',
+    final issue = IndianMobileNumber.issue(value);
+    if (issue != null) {
+      throw ValidationFailure(
+        IndianMobileNumber.message(issue),
         code: 'profile_phone_invalid',
       );
     }
 
-    return normalized;
+    return IndianMobileNumber.normalize(value);
   }
 
   String? _normalizeGender(String? rawGender) {

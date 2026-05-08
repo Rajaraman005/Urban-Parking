@@ -66,8 +66,6 @@ class ListingDetailStat {
 }
 
 class _ListingDetailsPageState extends State<ListingDetailsPage> {
-  static const _fallbackImageUrl =
-      'https://images.unsplash.com/photo-1506521781263-d8422e82f27a';
   static const _heroPageSeed = 1000;
   static const _autoSlideInterval = Duration(seconds: 4);
   static const _slideDuration = Duration(milliseconds: 620);
@@ -252,6 +250,9 @@ class _ListingDetailsPageState extends State<ListingDetailsPage> {
   }
 
   Future<void> _openHeroViewer(int initialIndex) async {
+    if (_heroUrls.isEmpty) {
+      return;
+    }
     _heroTimer?.cancel();
     await showFullscreenImageViewer(
       context,
@@ -268,7 +269,6 @@ class _ListingDetailsPageState extends State<ListingDetailsPage> {
       final url = rawUrl.trim();
       if (url.isNotEmpty) urls.add(url);
     }
-    if (urls.isEmpty) urls.add(_fallbackImageUrl);
     return urls.toList(growable: false);
   }
 
@@ -398,18 +398,23 @@ class _HeroGallery extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              PageView.builder(
-                controller: controller,
-                onPageChanged: onChanged,
-                itemBuilder: (context, index) {
-                  final imageIndex = index % imageUrls.length;
-                  return GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => onImageTap(imageIndex),
-                    child: _NetworkCoverImage(imageUrl: imageUrls[imageIndex]),
-                  );
-                },
-              ),
+              if (imageUrls.isEmpty)
+                const _EmptyListingImage()
+              else
+                PageView.builder(
+                  controller: controller,
+                  onPageChanged: onChanged,
+                  itemBuilder: (context, index) {
+                    final imageIndex = index % imageUrls.length;
+                    return GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => onImageTap(imageIndex),
+                      child: _NetworkCoverImage(
+                        imageUrl: imageUrls[imageIndex],
+                      ),
+                    );
+                  },
+                ),
               const IgnorePointer(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
@@ -473,7 +478,7 @@ class _HeroGallery extends StatelessWidget {
                     ),
                   ),
                 ),
-              if (imageUrls.length <= 1)
+              if (imageUrls.length == 1)
                 Positioned(
                   left: 0,
                   right: 0,
@@ -910,6 +915,35 @@ class _NetworkCoverImage extends StatelessWidget {
       errorWidget: (context, _, _) => const ColoredBox(
         color: Color(0xFFF4F6F8),
         child: Icon(Icons.image_not_supported_outlined, color: Colors.black),
+      ),
+    );
+  }
+}
+
+class _EmptyListingImage extends StatelessWidget {
+  const _EmptyListingImage();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(color: Color(0xFFF4F6F8)),
+      child: Center(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
+          ),
+          child: const SizedBox(
+            width: 54,
+            height: 54,
+            child: Icon(
+              Icons.image_not_supported_outlined,
+              color: Color(0xFF6B7280),
+              size: 24,
+            ),
+          ),
+        ),
       ),
     );
   }

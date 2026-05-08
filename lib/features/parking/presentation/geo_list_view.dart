@@ -92,9 +92,11 @@ class GeoListView extends ConsumerWidget {
         final liveSpot = item.serviceType == ServiceType.parking
             ? ref.watch(parkingListingSnapshotProvider(item.id))?.spot
             : null;
+        final imageUrls = liveSpot?.imageUrls ?? _imageUrlsFor(item);
 
         return ProductCard(
-          imageUrl: liveSpot?.imageUrls.first ?? _imageUrlFor(item),
+          imageUrl: imageUrls.isEmpty ? '' : imageUrls.first,
+          imageUrls: imageUrls,
           title: liveSpot?.title ?? item.title,
           subtitle: liveSpot == null
               ? _subtitleFor(item)
@@ -130,10 +132,40 @@ class GeoListView extends ConsumerWidget {
     return '${item.distanceKm.toStringAsFixed(1)} km nearby';
   }
 
-  String _imageUrlFor(GeoDiscoveryEntity<Map<String, Object?>> item) {
-    return item.imageUrl ??
-        item.entity['imageUrl']?.toString() ??
-        'https://images.unsplash.com/photo-1506521781263-d8422e82f27a';
+  List<String> _imageUrlsFor(GeoDiscoveryEntity<Map<String, Object?>> item) {
+    final urls = <String>{};
+
+    void addUrl(Object? value) {
+      if (value is String) {
+        final url = value.trim();
+        if (url.isNotEmpty) {
+          urls.add(url);
+        }
+        return;
+      }
+
+      if (value is Iterable) {
+        for (final entry in value) {
+          addUrl(entry);
+        }
+        return;
+      }
+
+      if (value is Map) {
+        addUrl(value['secure_url']);
+        addUrl(value['url']);
+        addUrl(value['imageUrl']);
+      }
+    }
+
+    addUrl(item.entity['imageUrls']);
+    addUrl(item.entity['images']);
+    addUrl(item.entity['photos']);
+    addUrl(item.entity['parking_space_photos']);
+    addUrl(item.imageUrl);
+    addUrl(item.entity['imageUrl']);
+
+    return urls.toList(growable: false);
   }
 
   String _subtitleFor(GeoDiscoveryEntity<Map<String, Object?>> item) {

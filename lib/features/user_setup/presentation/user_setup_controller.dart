@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/validation/indian_vehicle_registration.dart';
+import '../../auth/presentation/auth_controller.dart';
 import '../../parking/domain/owner_parking_repository.dart';
 import '../data/user_setup_repository_impl.dart';
 import '../domain/user_setup_repository.dart';
@@ -16,6 +20,9 @@ final userSetupControllerProvider =
 
 class UserSetupController extends AsyncNotifier<UserSetupState> {
   UserSetupRepository? _repository;
+  Future<HostListingDraft?>? _resumeLookupInFlight;
+  Future<UserSetupState>? _startHostListingInFlight;
+  String? _startHostListingInFlightKey;
 
   UserSetupRepository get _repo {
     final repository = _repository;
@@ -38,7 +45,19 @@ class UserSetupController extends AsyncNotifier<UserSetupState> {
   }
 
   Future<HostListingDraft?> loadHostDraftResumeCandidate() {
-    return _repo.loadHostDraftResumeCandidate();
+    final inFlight = _resumeLookupInFlight;
+    if (inFlight != null) return inFlight;
+
+    final future = _repo.loadHostDraftResumeCandidate();
+    _resumeLookupInFlight = future;
+    unawaited(
+      future.whenComplete(() {
+        if (identical(_resumeLookupInFlight, future)) {
+          _resumeLookupInFlight = null;
+        }
+      }),
+    );
+    return future;
   }
 
   Future<UserSetupState> startHostListing({
@@ -46,13 +65,31 @@ class UserSetupController extends AsyncNotifier<UserSetupState> {
     String? resumeDraftId,
     String? resumeStep,
   }) async {
-    return _run(
+    final key = '$createNew|${resumeDraftId ?? ''}|${resumeStep ?? ''}';
+    final inFlight = _startHostListingInFlight;
+    if (inFlight != null && _startHostListingInFlightKey == key) {
+      return inFlight;
+    }
+
+    final future = _run(
       () => _repo.startHostListing(
         createNew: createNew,
         resumeDraftId: resumeDraftId,
         resumeStep: resumeStep,
       ),
     );
+    _startHostListingInFlight = future;
+    _startHostListingInFlightKey = key;
+    try {
+      final next = await future;
+      _syncAuthProfile(next);
+      return next;
+    } finally {
+      if (identical(_startHostListingInFlight, future)) {
+        _startHostListingInFlight = null;
+        _startHostListingInFlightKey = null;
+      }
+    }
   }
 
   void prepareNewHostListing() {
@@ -103,7 +140,7 @@ class UserSetupController extends AsyncNotifier<UserSetupState> {
     required String gender,
     required String dob,
   }) async {
-    return _setData(
+    final next = await _setData(
       () => _repo.saveProfile(
         fullName: fullName,
         phone: phone,
@@ -111,6 +148,37 @@ class UserSetupController extends AsyncNotifier<UserSetupState> {
         dob: dob,
       ),
     );
+    _syncSavedProfile(
+      dob: dob,
+      fullName: fullName,
+      gender: gender,
+      nextStep: next.step,
+      phone: phone,
+    );
+    return next;
+  }
+
+  Future<UserSetupState> saveVehicleDetails({
+    String? vehicleMake,
+    String? vehicleModel,
+    required String vehicleRegistration,
+    required String vehicleType,
+  }) async {
+    final next = await _setData(
+      () => _repo.saveVehicleDetails(
+        vehicleMake: vehicleMake,
+        vehicleModel: vehicleModel,
+        vehicleRegistration: vehicleRegistration,
+        vehicleType: vehicleType,
+      ),
+    );
+    _syncSavedVehicleDetails(
+      vehicleMake: vehicleMake,
+      vehicleModel: vehicleModel,
+      vehicleRegistration: vehicleRegistration,
+      vehicleType: vehicleType,
+    );
+    return next;
   }
 
   Future<UserSetupState> advanceHostStep(String step) async {
@@ -120,6 +188,7 @@ class UserSetupController extends AsyncNotifier<UserSetupState> {
       _ => await _repo.loadSnapshot(),
     };
     state = AsyncData(next);
+    _syncAuthProfile(next);
     return next;
   }
 
@@ -128,6 +197,7 @@ class UserSetupController extends AsyncNotifier<UserSetupState> {
     try {
       final next = await action();
       state = AsyncData(next);
+      _syncAuthProfile(next);
       return next;
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
@@ -142,4 +212,104 @@ class UserSetupController extends AsyncNotifier<UserSetupState> {
     state = AsyncData(next);
     return next;
   }
+
+  void _syncAuthProfile(UserSetupState setupState) {
+    final draft = setupState.draft;
+    final auth = ref.read(authControllerProvider.notifier);
+    if (draft == null ||
+        setupState.step == 'complete' ||
+        draft.status != 'draft') {
+      auth.clearHostDraftReference(draftId: setupState.draftId);
+      return;
+    }
+
+    auth.setHostDraftReference(
+      draftId: draft.id,
+      legacyDraft: draft.isLegacyParkingSpaceDraft,
+      step: setupState.step,
+    );
+  }
+
+  void _syncSavedProfile({
+    required String dob,
+    required String fullName,
+    required String gender,
+    required String nextStep,
+    required String phone,
+  }) {
+    final current = ref.read(authControllerProvider).value;
+    final profile = current?.profile;
+    if (current == null || profile == null) return;
+
+    final parsedDob = _parseDate(dob);
+    ref
+        .read(authControllerProvider.notifier)
+        .replaceProfile(
+          profile.copyWith(
+            dob: parsedDob,
+            fullName: fullName.trim(),
+            gender: gender.trim(),
+            onboardingCompletedAt: nextStep == 'complete'
+                ? DateTime.now().toUtc()
+                : null,
+            phone: phone.trim(),
+            setupStep: nextStep,
+            version: profile.version + 1,
+          ),
+        );
+  }
+
+  void _syncSavedVehicleDetails({
+    String? vehicleMake,
+    String? vehicleModel,
+    required String vehicleRegistration,
+    required String vehicleType,
+  }) {
+    final current = ref.read(authControllerProvider).value;
+    final profile = current?.profile;
+    if (current == null || profile == null) return;
+
+    ref
+        .read(authControllerProvider.notifier)
+        .replaceProfile(
+          profile.copyWith(
+            onboardingCompletedAt: DateTime.now().toUtc(),
+            setupStep: 'complete',
+            vehicleMake: _blankToNull(vehicleMake),
+            clearVehicleMake: _blankToNull(vehicleMake) == null,
+            vehicleModel: _blankToNull(vehicleModel),
+            clearVehicleModel: _blankToNull(vehicleModel) == null,
+            vehicleRegistration: _normalizeVehicleRegistrationForState(
+              vehicleRegistration,
+            ),
+            vehicleType: vehicleType.trim().toLowerCase(),
+            version: profile.version + 1,
+          ),
+        );
+  }
+}
+
+DateTime? _parseDate(String value) {
+  final text = value.trim();
+  final slashMatch = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(text);
+  if (slashMatch != null) {
+    final day = int.tryParse(slashMatch.group(1)!);
+    final month = int.tryParse(slashMatch.group(2)!);
+    final year = int.tryParse(slashMatch.group(3)!);
+    if (day == null || month == null || year == null) return null;
+    return DateTime(year, month, day);
+  }
+  final parsed = DateTime.tryParse(text);
+  if (parsed == null) return null;
+  return DateTime(parsed.year, parsed.month, parsed.day);
+}
+
+String? _blankToNull(String? value) {
+  final text = value?.trim().replaceAll(RegExp(r'\s+'), ' ');
+  return text == null || text.isEmpty ? null : text;
+}
+
+String _normalizeVehicleRegistrationForState(String value) {
+  return IndianVehicleRegistration.normalize(value) ??
+      IndianVehicleRegistration.compact(value);
 }

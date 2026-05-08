@@ -55,7 +55,6 @@ interface ParkingSpaceRow {
 interface ProfileRow {
   avatar_url: string | null;
   full_name: string | null;
-  phone: string | null;
   role: string | null;
 }
 
@@ -88,7 +87,7 @@ const setCorsHeaders = (response: VercelResponseLike) => {
   response.setHeader("Access-Control-Allow-Origin", corsOrigin);
   response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
   response.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  response.setHeader("Cache-Control", "private, max-age=30, stale-while-revalidate=120");
+  response.setHeader("Cache-Control", "private, max-age=0, must-revalidate");
   response.setHeader("Vary", "Origin");
 };
 
@@ -302,7 +301,6 @@ const toParkingSpot = (row: ParkingSpaceRow, profile?: ProfileRow | null, curren
     distanceKm: 0,
     hostAvatarUrl: profile?.avatar_url?.trim() || undefined,
     hostName: profile?.full_name?.trim() || undefined,
-    hostPhone: profile?.phone?.trim() || undefined,
     hostRole: profile?.role?.trim() || "host",
     id: row.id,
     imageUrl,
@@ -331,7 +329,7 @@ const loadHostProfile = async (
 ) => {
   const { data, error } = await client
     .from("profiles")
-    .select("full_name,avatar_url,phone,role")
+    .select("full_name,avatar_url,role")
     .eq("id", hostId)
     .maybeSingle();
 

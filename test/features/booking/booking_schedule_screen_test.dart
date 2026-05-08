@@ -1,10 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
 import 'package:urban_parking/config/app_providers.dart';
 import 'package:urban_parking/core/utils/geo_discovery/geo_types.dart';
+import 'package:urban_parking/features/booking/domain/booking.dart';
 import 'package:urban_parking/features/booking/domain/booking_quote.dart';
+import 'package:urban_parking/features/booking/domain/booking_repository.dart';
+import 'package:urban_parking/features/booking/presentation/booking_controller.dart';
 import 'package:urban_parking/features/booking/presentation/booking_schedule_screen.dart';
 import 'package:urban_parking/features/parking/domain/parking_repository.dart';
 import 'package:urban_parking/features/parking/domain/parking_spot.dart';
@@ -81,6 +86,51 @@ void main() {
 
     expect(find.text('\u20B959'), findsWidgets);
     expect(reserveButton().onTap, isNotNull);
+  });
+
+  testWidgets('duplicate reserve taps reuse one idempotency key', (
+    tester,
+  ) async {
+    final bookingRepository = _FakeBookingRepository();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          bookingRepositoryProvider.overrideWithValue(bookingRepository),
+          parkingRepositoryProvider.overrideWithValue(_FakeParkingRepository()),
+        ],
+        child: const MaterialApp(home: BookingScheduleScreen(spotId: 'spot-1')),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('From'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('From'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('time-range-apply')));
+    await tester.tap(find.byKey(const ValueKey('time-range-apply')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('reserve-slot-cta')));
+    await tester.tap(find.byKey(const ValueKey('reserve-slot-cta')));
+
+    expect(bookingRepository.createRequests, hasLength(2));
+    expect(
+      bookingRepository.createRequests[0].idempotencyKey,
+      bookingRepository.createRequests[1].idempotencyKey,
+    );
+
+    bookingRepository.completeCreates();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Request sent'), findsWidgets);
   });
 
   testWidgets('time range sheet closes when tapping outside', (tester) async {
@@ -285,5 +335,68 @@ class _FakeParkingRepository implements ParkingRepository {
     required double radiusKm,
   }) async {
     return [await getById('spot-1')];
+  }
+}
+
+class _FakeBookingRepository implements BookingRepository {
+  final createRequests = <CreateBookingRequest>[];
+  final _pendingCreates = <Completer<ParkingBooking>>[];
+
+  @override
+  Future<ParkingBooking> approveBooking({
+    required String bookingId,
+    required int expectedVersion,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<ParkingBooking> createBooking(CreateBookingRequest request) {
+    createRequests.add(request);
+    final completer = Completer<ParkingBooking>();
+    _pendingCreates.add(completer);
+    return completer.future;
+  }
+
+  void completeCreates() {
+    for (var index = 0; index < _pendingCreates.length; index++) {
+      if (_pendingCreates[index].isCompleted) continue;
+      final request = createRequests[index];
+      _pendingCreates[index].complete(
+        ParkingBooking(
+          currency: 'INR',
+          endAt: request.endAt,
+          hostId: 'host-1',
+          id: 'booking-$index',
+          idempotencyKey: request.idempotencyKey,
+          platformFee: 8,
+          renterId: 'renter-1',
+          requestHash: 'hash-$index',
+          slotNumber: 1,
+          spotId: request.spotId,
+          startAt: request.startAt,
+          status: BookingStatus.pending,
+          subtotal: 50,
+          taxes: 1,
+          total: 59,
+          updatedAt: DateTime.now(),
+          vehicleKind: request.vehicleKind,
+          version: 1,
+        ),
+      );
+    }
+  }
+
+  @override
+  Future<List<ParkingBooking>> listBookings(BookingListRole role) async {
+    return const [];
+  }
+
+  @override
+  Future<ParkingBooking> rejectBooking({
+    required String bookingId,
+    required int expectedVersion,
+  }) async {
+    throw UnimplementedError();
   }
 }

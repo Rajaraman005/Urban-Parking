@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +9,7 @@ import '../../../shared/widgets/app_toast.dart';
 import '../../../shared/widgets/fullscreen_image_viewer_page.dart';
 import '../../../shared/widgets/state_view.dart';
 import '../../parking/domain/parking_availability.dart';
+import '../../parking/presentation/owner_parking_controller.dart';
 import '../domain/user_setup_state.dart';
 import 'user_setup_controller.dart';
 import 'widgets/host_setup_app_bar.dart';
@@ -185,6 +187,7 @@ class _HostSpaceReviewScreenState extends ConsumerState<HostSpaceReviewScreen> {
     try {
       await ref.read(userSetupControllerProvider.notifier).submitHostListing();
       if (mounted) {
+        ref.invalidate(ownedParkingSpacesProvider);
         AppToast.success(context, 'Listing submitted for review');
         context.go('/profile/my-spaces');
       }
@@ -433,40 +436,67 @@ class _PhotoPreviewSection extends StatelessWidget {
                 ),
               )
             else
-              SizedBox(
-                height: 96,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.only(right: 4),
-                  itemBuilder: (context, index) {
-                    final photo = photos[index];
-                    return Semantics(
-                      button: true,
-                      label: 'View parking photo ${index + 1}',
-                      child: Material(
-                        color: Colors.transparent,
-                        borderRadius: BorderRadius.circular(12),
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                          onTap: () => _openPhotoViewer(context, index),
-                          child: SizedBox(
-                            width: 112,
-                            height: 96,
-                            child: Image.network(
-                              photo.secureUrl,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) => const ColoredBox(
-                                color: Color(0xFFF3F4F6),
-                                child: Icon(Icons.broken_image_outlined),
+              RepaintBoundary(
+                child: SizedBox(
+                  height: 96,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.only(right: 4),
+                    itemBuilder: (context, index) {
+                      final photo = photos[index];
+                      return Semantics(
+                        button: true,
+                        label: 'View parking photo ${index + 1}',
+                        child: Material(
+                          color: Colors.transparent,
+                          borderRadius: BorderRadius.circular(12),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
+                            onTap: () => _openPhotoViewer(context, index),
+                            child: SizedBox(
+                              width: 112,
+                              height: 96,
+                              child: CachedNetworkImage(
+                                imageUrl: photo.secureUrl,
+                                fit: BoxFit.cover,
+                                fadeInDuration: Duration.zero,
+                                memCacheHeight:
+                                    (96 *
+                                            MediaQuery.devicePixelRatioOf(
+                                              context,
+                                            ))
+                                        .round(),
+                                memCacheWidth:
+                                    (112 *
+                                            MediaQuery.devicePixelRatioOf(
+                                              context,
+                                            ))
+                                        .round(),
+                                placeholder: (_, _) => const ColoredBox(
+                                  color: Color(0xFFF3F4F6),
+                                  child: Center(
+                                    child: SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.1,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                errorWidget: (_, _, _) => const ColoredBox(
+                                  color: Color(0xFFF3F4F6),
+                                  child: Icon(Icons.broken_image_outlined),
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    );
-                  },
-                  separatorBuilder: (_, _) => const SizedBox(width: 10),
-                  itemCount: photos.length,
+                      );
+                    },
+                    separatorBuilder: (_, _) => const SizedBox(width: 10),
+                    itemCount: photos.length,
+                  ),
                 ),
               ),
           ],

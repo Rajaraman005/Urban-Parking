@@ -1,10 +1,17 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../config/app_providers.dart';
-import '../../booking/domain/booking_quote.dart';
+import '../data/booking_repository_impl.dart';
+import '../domain/booking.dart';
+import '../domain/booking_quote.dart';
+import '../domain/booking_repository.dart';
 import '../../parking/domain/parking_availability.dart';
 import '../../parking/domain/parking_spot.dart';
 import '../../parking/presentation/parking_listing_store.dart';
+
+final bookingRepositoryProvider = Provider<BookingRepository>((ref) {
+  return BookingRepositoryImpl(apiClient: ref.watch(apiClientProvider));
+});
 
 final bookingSpotProvider = FutureProvider.family<ParkingSpot, String>((
   ref,
@@ -24,6 +31,96 @@ final bookingQuoteProvider =
             endAt: request.endAt,
           );
     });
+
+final bookingSubmitControllerProvider =
+    AsyncNotifierProvider<BookingSubmitController, ParkingBooking?>(
+      BookingSubmitController.new,
+    );
+
+class BookingSubmitController extends AsyncNotifier<ParkingBooking?> {
+  late final BookingRepository _repository;
+
+  @override
+  ParkingBooking? build() {
+    _repository = ref.watch(bookingRepositoryProvider);
+    return null;
+  }
+
+  Future<ParkingBooking> createBooking(CreateBookingRequest request) async {
+    state = const AsyncLoading();
+    try {
+      final booking = await _repository.createBooking(request);
+      state = AsyncData(booking);
+      ref.invalidate(renterBookingsProvider);
+      ref.invalidate(hostBookingsProvider);
+      return booking;
+    } catch (error, stackTrace) {
+      state = AsyncError(error, stackTrace);
+      rethrow;
+    }
+  }
+}
+
+final renterBookingsProvider = FutureProvider<List<ParkingBooking>>((ref) {
+  return ref
+      .watch(bookingRepositoryProvider)
+      .listBookings(BookingListRole.renter);
+});
+
+final hostBookingsProvider = FutureProvider<List<ParkingBooking>>((ref) {
+  return ref
+      .watch(bookingRepositoryProvider)
+      .listBookings(BookingListRole.host);
+});
+
+final hostBookingActionControllerProvider =
+    AsyncNotifierProvider<HostBookingActionController, void>(
+      HostBookingActionController.new,
+    );
+
+class HostBookingActionController extends AsyncNotifier<void> {
+  late final BookingRepository _repository;
+
+  @override
+  void build() {
+    _repository = ref.watch(bookingRepositoryProvider);
+  }
+
+  Future<ParkingBooking> approve(ParkingBooking booking) {
+    return _transition(booking, BookingStatus.approved);
+  }
+
+  Future<ParkingBooking> reject(ParkingBooking booking) {
+    return _transition(booking, BookingStatus.rejected);
+  }
+
+  Future<ParkingBooking> _transition(
+    ParkingBooking booking,
+    BookingStatus nextStatus,
+  ) async {
+    state = const AsyncLoading();
+    try {
+      final updated = switch (nextStatus) {
+        BookingStatus.approved => await _repository.approveBooking(
+          bookingId: booking.id,
+          expectedVersion: booking.version,
+        ),
+        BookingStatus.rejected => await _repository.rejectBooking(
+          bookingId: booking.id,
+          expectedVersion: booking.version,
+        ),
+        BookingStatus.pending || BookingStatus.expired => booking,
+      };
+      state = const AsyncData(null);
+      ref.invalidate(hostBookingsProvider);
+      ref.invalidate(renterBookingsProvider);
+      return updated;
+    } catch (error, stackTrace) {
+      state = AsyncError(error, stackTrace);
+      rethrow;
+    }
+  }
+}
 
 final bookingControllerProvider = FutureProvider.family<BookingState, String>((
   ref,

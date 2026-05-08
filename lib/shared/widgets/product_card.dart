@@ -17,6 +17,7 @@ class ProductCard extends StatelessWidget {
     this.badge,
     this.favoriteSelected = false,
     this.imageHeight = 156,
+    this.imageUrls = const [],
     this.onFavoritePressed,
     this.onOpenPressed,
     this.onTap,
@@ -29,6 +30,7 @@ class ProductCard extends StatelessWidget {
   final bool favoriteSelected;
   final double imageHeight;
   final String imageUrl;
+  final List<String> imageUrls;
   final VoidCallback? onFavoritePressed;
   final VoidCallback? onOpenPressed;
   final VoidCallback? onTap;
@@ -39,6 +41,7 @@ class ProductCard extends StatelessWidget {
   final String title;
 
   static const _radius = 8.0;
+  static const _imageRadius = 10.0;
   static const _inkColor = Color(0xFF0B0B0C);
   static const _mutedColor = Color(0xFF686872);
   static const _softSurface = Color(0xFFF7F7F8);
@@ -82,7 +85,7 @@ class ProductCard extends StatelessWidget {
                   badge: badge,
                   favoriteSelected: favoriteSelected,
                   height: imageHeight,
-                  imageUrl: imageUrl,
+                  imageUrls: _normalizedImageUrls(imageUrl, imageUrls),
                   onFavoritePressed: onFavoritePressed,
                   onOpenPressed: onOpenPressed,
                 ),
@@ -147,13 +150,34 @@ class ProductCard extends StatelessWidget {
       ),
     );
   }
+
+  static List<String> _normalizedImageUrls(
+    String primaryUrl,
+    List<String> extraUrls,
+  ) {
+    final urls = <String>{};
+
+    void addUrl(String? rawUrl) {
+      final url = rawUrl?.trim();
+      if (url != null && url.isNotEmpty) {
+        urls.add(url);
+      }
+    }
+
+    for (final url in extraUrls) {
+      addUrl(url);
+    }
+    addUrl(primaryUrl);
+
+    return urls.toList(growable: false);
+  }
 }
 
-class _ProductCardImage extends StatelessWidget {
+class _ProductCardImage extends StatefulWidget {
   const _ProductCardImage({
     required this.favoriteSelected,
     required this.height,
-    required this.imageUrl,
+    required this.imageUrls,
     this.badge,
     this.onFavoritePressed,
     this.onOpenPressed,
@@ -162,109 +186,263 @@ class _ProductCardImage extends StatelessWidget {
   final String? badge;
   final bool favoriteSelected;
   final double height;
-  final String imageUrl;
+  final List<String> imageUrls;
   final VoidCallback? onFavoritePressed;
   final VoidCallback? onOpenPressed;
 
   @override
-  Widget build(BuildContext context) {
-    final bottomShadeOpacity = badge == null ? 0.18 : 0.62;
+  State<_ProductCardImage> createState() => _ProductCardImageState();
+}
 
-    return SizedBox(
-      height: height,
-      width: double.infinity,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          CachedNetworkImage(
-            imageUrl: _optimizedImageUrl(imageUrl),
-            fit: BoxFit.cover,
-            filterQuality: FilterQuality.medium,
-            fadeInDuration: const Duration(milliseconds: 180),
-            fadeOutDuration: const Duration(milliseconds: 90),
-            placeholder: (context, _) =>
-                const ColoredBox(color: ProductCard._softSurface),
-            errorWidget: (context, _, _) => const ColoredBox(
-              color: ProductCard._softSurface,
-              child: Center(
-                child: Icon(
-                  Icons.image_not_supported_outlined,
-                  color: ProductCard._mutedColor,
+class _ProductCardImageState extends State<_ProductCardImage> {
+  late final PageController _pageController;
+  late String _imageSignature;
+  int _pageIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+    _imageSignature = _signatureFor(widget.imageUrls);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ProductCardImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    final nextSignature = _signatureFor(widget.imageUrls);
+    if (nextSignature == _imageSignature) {
+      if (_pageIndex >= widget.imageUrls.length) {
+        _pageIndex = widget.imageUrls.isEmpty ? 0 : widget.imageUrls.length - 1;
+      }
+      return;
+    }
+
+    _imageSignature = nextSignature;
+    _pageIndex = 0;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_pageController.hasClients) {
+        return;
+      }
+      _pageController.jumpToPage(0);
+    });
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrls = widget.imageUrls.isEmpty
+        ? const <String>['']
+        : widget.imageUrls;
+    final bottomShadeOpacity = widget.badge == null ? 0.18 : 0.62;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      child: Material(
+        color: ProductCard._softSurface,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(ProductCard._imageRadius),
+          side: BorderSide(color: Colors.black.withValues(alpha: 0.08)),
+        ),
+        child: SizedBox(
+          height: widget.height,
+          width: double.infinity,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (imageUrls.length == 1)
+                _ProductCardNetworkImage(imageUrl: imageUrls.first)
+              else
+                PageView.builder(
+                  controller: _pageController,
+                  itemCount: imageUrls.length,
+                  onPageChanged: (index) => setState(() {
+                    _pageIndex = index;
+                  }),
+                  itemBuilder: (context, index) {
+                    return _ProductCardNetworkImage(imageUrl: imageUrls[index]);
+                  },
+                ),
+              IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.06),
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: bottomShadeOpacity),
+                      ],
+                      stops: const [0, 0.48, 1],
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withValues(alpha: 0.06),
-                  Colors.transparent,
-                  Colors.black.withValues(alpha: bottomShadeOpacity),
-                ],
-                stops: const [0, 0.48, 1],
-              ),
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: ColoredBox(
-              color: Colors.black.withValues(alpha: 0.08),
-              child: const SizedBox(height: 1),
-            ),
-          ),
-          if (badge != null)
-            Positioned(
-              left: 12,
-              right: 72,
-              bottom: 12,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: _ProductCardBadge(badge!),
-              ),
-            ),
-          Positioned(
-            top: 12,
-            right: 12,
-            child: Row(
-              children: [
-                if (onFavoritePressed != null) ...[
-                  _ProductCardIconButton(
-                    backgroundColor: Colors.white.withValues(alpha: 0.94),
-                    foregroundColor: ProductCard._inkColor,
-                    icon: favoriteSelected
-                        ? Icons.favorite_rounded
-                        : Icons.favorite_border_rounded,
-                    semanticLabel: 'Save',
-                    onPressed: onFavoritePressed!,
+              if (widget.badge != null)
+                Positioned(
+                  left: 12,
+                  right: 72,
+                  bottom: 12,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: IgnorePointer(
+                      child: _ProductCardBadge(widget.badge!),
+                    ),
                   ),
-                  const SizedBox(width: 8),
-                ],
-                if (onOpenPressed != null)
-                  _ProductCardIconButton(
-                    backgroundColor: Colors.white.withValues(alpha: 0.94),
-                    foregroundColor: ProductCard._inkColor,
-                    icon: Icons.arrow_outward_rounded,
-                    semanticLabel: 'Open details',
-                    onPressed: onOpenPressed!,
+                ),
+              if (imageUrls.length > 1)
+                Positioned(
+                  left: widget.badge == null ? 0 : null,
+                  right: widget.badge == null ? 0 : 12,
+                  bottom: 10,
+                  child: Align(
+                    alignment: widget.badge == null
+                        ? Alignment.bottomCenter
+                        : Alignment.bottomRight,
+                    child: IgnorePointer(
+                      child: _ProductCardCarouselDots(
+                        activeIndex: _pageIndex,
+                        count: imageUrls.length,
+                      ),
+                    ),
                   ),
-              ],
-            ),
+                ),
+              Positioned(
+                top: 12,
+                right: 12,
+                child: Row(
+                  children: [
+                    if (widget.onFavoritePressed != null) ...[
+                      _ProductCardIconButton(
+                        backgroundColor: Colors.white.withValues(alpha: 0.94),
+                        foregroundColor: ProductCard._inkColor,
+                        icon: widget.favoriteSelected
+                            ? Icons.favorite_rounded
+                            : Icons.favorite_border_rounded,
+                        semanticLabel: 'Save',
+                        onPressed: widget.onFavoritePressed!,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    if (widget.onOpenPressed != null)
+                      _ProductCardIconButton(
+                        backgroundColor: Colors.white.withValues(alpha: 0.94),
+                        foregroundColor: ProductCard._inkColor,
+                        icon: Icons.arrow_outward_rounded,
+                        semanticLabel: 'Open details',
+                        onPressed: widget.onOpenPressed!,
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  String _optimizedImageUrl(String url) {
+  String _signatureFor(List<String> urls) => urls.join('\n');
+}
+
+class _ProductCardNetworkImage extends StatelessWidget {
+  const _ProductCardNetworkImage({required this.imageUrl});
+
+  final String imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageUrl.trim().isEmpty) {
+      return const ColoredBox(
+        color: ProductCard._softSurface,
+        child: Center(
+          child: Icon(
+            Icons.image_not_supported_outlined,
+            color: ProductCard._mutedColor,
+          ),
+        ),
+      );
+    }
+
+    return CachedNetworkImage(
+      imageUrl: _optimizedImageUrl(imageUrl),
+      fit: BoxFit.cover,
+      filterQuality: FilterQuality.medium,
+      fadeInDuration: const Duration(milliseconds: 180),
+      fadeOutDuration: const Duration(milliseconds: 90),
+      placeholder: (context, _) =>
+          const ColoredBox(color: ProductCard._softSurface),
+      errorWidget: (context, _, _) => const ColoredBox(
+        color: ProductCard._softSurface,
+        child: Center(
+          child: Icon(
+            Icons.image_not_supported_outlined,
+            color: ProductCard._mutedColor,
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _optimizedImageUrl(String url) {
     if (url.contains('images.unsplash.com') && !url.contains('?')) {
       return '$url?auto=format&fit=crop&w=1000&q=84';
     }
     return url;
+  }
+}
+
+class _ProductCardCarouselDots extends StatelessWidget {
+  const _ProductCardCarouselDots({
+    required this.activeIndex,
+    required this.count,
+  });
+
+  final int activeIndex;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Photo ${activeIndex + 1} of $count',
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.34),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var index = 0; index < count; index++) ...[
+                if (index > 0) const SizedBox(width: 4),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  width: index == activeIndex ? 14 : 5,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(
+                      alpha: index == activeIndex ? 0.96 : 0.52,
+                    ),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

@@ -39,12 +39,47 @@ void main() {
     expect(display.displayEmail, 'driver@example.com');
   });
 
+  test('profile display ignores provider seeded Google avatars', () {
+    final display = profileDisplayFor(
+      const AuthState(
+        status: AuthStatus.authenticated,
+        user: AppUser(id: 'user-1', email: 'raja@example.com'),
+        profile: UserProfile(
+          id: 'user-1',
+          fullName: 'Raja Raman',
+          avatarUrl: 'https://lh3.googleusercontent.com/a/provider-photo',
+        ),
+      ),
+    );
+
+    expect(display.avatarUrl, isNull);
+    expect(profileInitials(display.displayName), 'RA');
+  });
+
+  test('profile display keeps explicit uploaded avatars', () {
+    final display = profileDisplayFor(
+      const AuthState(
+        status: AuthStatus.authenticated,
+        user: AppUser(id: 'user-1', email: 'fresh@example.com'),
+        profile: UserProfile(
+          id: 'user-1',
+          avatarPublicId: 'profiles/user-1/avatar',
+          avatarUrl: 'https://res.cloudinary.com/demo/profile.jpg',
+          fullName: 'Fresh User',
+        ),
+      ),
+    );
+
+    expect(display.avatarUrl, 'https://res.cloudinary.com/demo/profile.jpg');
+  });
+
   test('realtime profile record maps to user profile', () {
     final profile = userProfileFromRealtimeRecord({
       'id': 'user-1',
       'full_name': 'Live Updated User',
       'email': 'live@example.com',
       'avatar_url': 'https://example.com/live.jpg',
+      'avatar_public_id': 'profiles/user-1/avatar',
       'phone': '9123456789',
       'version': 4,
     });
@@ -54,6 +89,7 @@ void main() {
     expect(profile.fullName, 'Live Updated User');
     expect(profile.email, 'live@example.com');
     expect(profile.avatarUrl, 'https://example.com/live.jpg');
+    expect(profile.avatarPublicId, 'profiles/user-1/avatar');
     expect(profile.phone, '9123456789');
     expect(profile.version, 4);
   });

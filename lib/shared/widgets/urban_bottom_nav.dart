@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 class UrbanBottomNav extends StatelessWidget {
-  const UrbanBottomNav({required this.currentIndex, super.key});
+  const UrbanBottomNav({
+    required this.currentIndex,
+    this.onDestinationSelected,
+    super.key,
+  });
 
   final int currentIndex;
+  final ValueChanged<int>? onDestinationSelected;
 
   static const _contentHeight = 56.0;
   static const _selectedIndicatorSize = 40.0;
@@ -29,6 +34,13 @@ class UrbanBottomNav extends StatelessWidget {
       route: '/profile',
     ),
   ];
+
+  static int get destinationCount => destinations.length;
+
+  static String routeForIndex(int index) {
+    final safeIndex = index.clamp(0, destinations.length - 1);
+    return destinations[safeIndex].route;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -107,8 +119,13 @@ class UrbanBottomNav extends StatelessWidget {
   }
 
   void _selectDestination(BuildContext context, int index) {
-    final route = destinations[index].route;
+    final route = routeForIndex(index);
     if (GoRouterState.of(context).matchedLocation != route) {
+      final onSelected = onDestinationSelected;
+      if (onSelected != null) {
+        onSelected(index);
+        return;
+      }
       context.go(route);
     }
   }

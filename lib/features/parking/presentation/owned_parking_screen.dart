@@ -87,7 +87,16 @@ class _OwnedParkingScreenState extends ConsumerState<OwnedParkingScreen> {
           onAction: () => ref.invalidate(ownedParkingSpacesProvider),
         ),
         data: (items) {
-          if (items.isEmpty) {
+          final visibleItems = [
+            for (final item in items)
+              if (ref
+                      .watch(parkingListingSnapshotProvider(item.id))
+                      ?.isDeleted !=
+                  true)
+                item,
+          ];
+
+          if (visibleItems.isEmpty) {
             return StateView(
               title: 'No parking spaces yet',
               body: 'Create a parking listing before editing live details.',
@@ -98,16 +107,19 @@ class _OwnedParkingScreenState extends ConsumerState<OwnedParkingScreen> {
 
           ref.watch(
             visibleParkingListingRevisionsProvider(
-              parkingListingIdsKey(items.map((spot) => spot.id), maxIds: 12),
+              parkingListingIdsKey(
+                visibleItems.map((spot) => spot.id),
+                maxIds: 12,
+              ),
             ),
           );
 
-          _clearInvalidSelection(items);
+          _clearInvalidSelection(visibleItems);
 
           return ListView.separated(
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
             itemBuilder: (context, index) {
-              final seeded = items[index];
+              final seeded = visibleItems[index];
               final live =
                   ref.watch(parkingListingSnapshotProvider(seeded.id))?.spot ??
                   seeded;
@@ -124,7 +136,7 @@ class _OwnedParkingScreenState extends ConsumerState<OwnedParkingScreen> {
               );
             },
             separatorBuilder: (_, _) => const SizedBox(height: 16),
-            itemCount: items.length,
+            itemCount: visibleItems.length,
           );
         },
       ),

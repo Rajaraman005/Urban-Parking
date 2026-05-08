@@ -1,12 +1,16 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/widgets/app_screen.dart';
+import '../../auth/domain/auth_state.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../parking/presentation/owner_parking_controller.dart';
 import '../../user_setup/presentation/host_setup_launcher.dart';
+import '../../user_setup/presentation/host_setup_launch_controller.dart';
 import 'profile_display.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -24,6 +28,7 @@ class ProfileScreen extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(0, 0, 0, 28),
         children: [
+          _HostSetupPrewarmEffect(authState: authValue.value),
           _ProfileHero(
             avatarUrl: profileDisplay.avatarUrl,
             displayEmail: profileDisplay.displayEmail,
@@ -43,6 +48,13 @@ class ProfileScreen extends ConsumerWidget {
                   onTap: () => context.push('/profile/personal-details'),
                 ),
                 _ProfileActionTile(
+                  icon: Icons.privacy_tip_outlined,
+                  title: 'Privacy & Booking Controls',
+                  subtitle: 'Phone visibility and booking approvals',
+                  onTap: () =>
+                      context.push('/profile/privacy-booking-controls'),
+                ),
+                _ProfileActionTile(
                   icon: Icons.bookmark_border_rounded,
                   title: 'Parking activity',
                   subtitle: 'Bookings, saved places, and recent searches',
@@ -60,13 +72,31 @@ class ProfileScreen extends ConsumerWidget {
                   icon: Icons.add_home_work_outlined,
                   title: 'Host a parking space',
                   subtitle: 'Create or continue a parking listing',
+                  onTapDown: (_) {
+                    final authState = ref.read(authControllerProvider).value;
+                    if (!_shouldPrewarmHostSetup(authState)) return;
+                    unawaited(
+                      ref
+                          .read(hostSetupLaunchControllerProvider.notifier)
+                          .prewarmResumeCandidate(authState),
+                    );
+                  },
                   onTap: () => unawaited(startHostSetup(context, ref)),
                 ),
                 _ProfileActionTile(
                   icon: Icons.garage_outlined,
                   title: 'My parking spaces',
                   subtitle: 'Edit live price, address, and availability',
-                  onTap: () => context.push('/profile/my-spaces'),
+                  onTap: () {
+                    ref.invalidate(ownedParkingSpacesProvider);
+                    context.push('/profile/my-spaces');
+                  },
+                ),
+                _ProfileActionTile(
+                  icon: Icons.fact_check_outlined,
+                  title: 'Booking requests',
+                  subtitle: 'Approve, reject, or review host requests',
+                  onTap: () => context.push('/profile/booking-requests'),
                 ),
                 _ProfileActionTile(
                   icon: Icons.payments_outlined,
@@ -123,6 +153,69 @@ class ProfileScreen extends ConsumerWidget {
   }
 }
 
+class _HostSetupPrewarmEffect extends ConsumerStatefulWidget {
+  const _HostSetupPrewarmEffect({required this.authState});
+
+  final AuthState? authState;
+
+  @override
+  ConsumerState<_HostSetupPrewarmEffect> createState() =>
+      _HostSetupPrewarmEffectState();
+}
+
+class _HostSetupPrewarmEffectState
+    extends ConsumerState<_HostSetupPrewarmEffect> {
+  String? _lastPrewarmKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _schedulePrewarmIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HostSetupPrewarmEffect oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _schedulePrewarmIfNeeded();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
+
+  void _schedulePrewarmIfNeeded() {
+    final authState = widget.authState;
+    if (!_shouldPrewarmHostSetup(authState)) return;
+
+    final profile = authState!.profile;
+    final key = [
+      authState.user?.id ?? '',
+      profile?.hostParkingDraftId ?? '',
+      profile?.setupDraftId ?? '',
+      profile?.setupStep ?? '',
+    ].join('|');
+    if (_lastPrewarmKey == key) return;
+    _lastPrewarmKey = key;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(
+        ref
+            .read(hostSetupLaunchControllerProvider.notifier)
+            .prewarmResumeCandidate(widget.authState),
+      );
+    });
+  }
+}
+
+bool _shouldPrewarmHostSetup(AuthState? authState) {
+  if (authState?.isAuthenticated != true) return false;
+  final profile = authState?.profile;
+  final hostDraftId = profile?.hostParkingDraftId?.trim();
+  final legacyDraftId = profile?.setupDraftId?.trim();
+  return (hostDraftId != null && hostDraftId.isNotEmpty) ||
+      (legacyDraftId != null && legacyDraftId.isNotEmpty);
+}
+
 class _ProfileHero extends StatelessWidget {
   const _ProfileHero({
     required this.avatarUrl,
@@ -160,7 +253,11 @@ class _ProfileHero extends StatelessWidget {
           Positioned(
             left: 24,
             top: headerHeight - (avatarSize / 2),
-            child: _ProfileAvatar(avatarUrl: avatarUrl, size: avatarSize),
+            child: _ProfileAvatar(
+              avatarUrl: avatarUrl,
+              displayName: displayName,
+              size: avatarSize,
+            ),
           ),
           Positioned(
             left: 20,
@@ -255,9 +352,14 @@ class _ProfileBrandHeader extends StatelessWidget {
 }
 
 class _ProfileAvatar extends StatelessWidget {
-  const _ProfileAvatar({required this.avatarUrl, required this.size});
+  const _ProfileAvatar({
+    required this.avatarUrl,
+    required this.displayName,
+    required this.size,
+  });
 
   final String? avatarUrl;
+  final String displayName;
   final double size;
 
   @override
@@ -282,21 +384,43 @@ class _ProfileAvatar extends StatelessWidget {
           child: ColoredBox(
             color: const Color(0xFF0B0B0C),
             child: url == null || url.isEmpty
-                ? const Icon(
-                    Icons.person_outline_rounded,
-                    color: Colors.white,
-                    size: 40,
-                  )
-                : Image.network(
-                    url,
+                ? _ProfileInitials(displayName: displayName)
+                : CachedNetworkImage(
+                    imageUrl: url,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const Icon(
-                      Icons.person_outline_rounded,
-                      color: Colors.white,
-                      size: 40,
-                    ),
+                    fadeInDuration: Duration.zero,
+                    memCacheHeight:
+                        (size * MediaQuery.devicePixelRatioOf(context)).round(),
+                    memCacheWidth:
+                        (size * MediaQuery.devicePixelRatioOf(context)).round(),
+                    placeholder: (_, _) =>
+                        _ProfileInitials(displayName: displayName),
+                    errorWidget: (_, _, _) =>
+                        _ProfileInitials(displayName: displayName),
                   ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileInitials extends StatelessWidget {
+  const _ProfileInitials({required this.displayName});
+
+  final String displayName;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        profileInitials(displayName),
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 24,
+          fontWeight: FontWeight.w900,
+          height: 1,
+          letterSpacing: 0,
         ),
       ),
     );
@@ -400,9 +524,11 @@ class _ProfileActionTile extends StatelessWidget {
     required this.onTap,
     required this.subtitle,
     required this.title,
+    this.onTapDown,
   });
 
   final IconData icon;
+  final GestureTapDownCallback? onTapDown;
   final VoidCallback onTap;
   final String subtitle;
   final String title;
@@ -412,6 +538,7 @@ class _ProfileActionTile extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        onTapDown: onTapDown,
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),

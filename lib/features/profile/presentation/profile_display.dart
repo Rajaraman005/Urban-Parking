@@ -30,13 +30,37 @@ ProfileDisplay profileDisplayFor(AuthState? auth) {
   final profile = auth?.profile;
   final email = _displayEmail(auth);
   return ProfileDisplay(
-    avatarUrl: _clean(profile?.avatarUrl),
+    avatarUrl: displayProfileAvatarUrl(profile),
     displayEmail: email,
     displayName: _displayName(auth, email),
     isSignedIn: auth?.isAuthenticated ?? false,
     phone: _clean(profile?.phone),
     profile: profile,
   );
+}
+
+String? displayProfileAvatarUrl(UserProfile? profile) {
+  final url = _clean(profile?.avatarUrl);
+  if (url == null) return null;
+
+  final publicId = _clean(profile?.avatarPublicId);
+  if (publicId != null) return url;
+
+  return _isProviderSeededAvatar(url) ? null : url;
+}
+
+String profileInitials(String? value, {String fallback = 'UP'}) {
+  final compact = (value ?? '')
+      .trim()
+      .replaceAll(RegExp(r'\s+'), '')
+      .replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+  if (compact.length >= 2) {
+    return compact.substring(0, 2).toUpperCase();
+  }
+  if (compact.length == 1) {
+    return compact.toUpperCase();
+  }
+  return fallback;
 }
 
 String _displayName(AuthState? auth, String email) {
@@ -70,4 +94,12 @@ String _displayEmail(AuthState? auth) {
 String? _clean(String? value) {
   final trimmed = value?.trim();
   return trimmed == null || trimmed.isEmpty ? null : trimmed;
+}
+
+bool _isProviderSeededAvatar(String url) {
+  final uri = Uri.tryParse(url);
+  final host = uri?.host.toLowerCase() ?? url.toLowerCase();
+  return host.contains('googleusercontent.com') ||
+      host.contains('ggpht.com') ||
+      host.contains('googleapis.com');
 }

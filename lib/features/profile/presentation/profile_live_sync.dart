@@ -8,6 +8,9 @@ import '../../../config/app_config.dart';
 import '../../../core/utils/app_logger.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../parking/presentation/owner_parking_controller.dart';
+import '../../user_setup/presentation/host_setup_launch_controller.dart';
+import '../../user_setup/presentation/user_setup_controller.dart';
 
 final profileLiveSyncProvider = Provider<void>((ref) {
   final userId = ref.watch(_profileLiveUserIdProvider);
@@ -40,7 +43,33 @@ final profileLiveSyncProvider = Provider<void>((ref) {
           if (profile == null) {
             return;
           }
+          final previousProfile = ref
+              .read(authControllerProvider)
+              .value
+              ?.profile;
           ref.read(authControllerProvider.notifier).replaceProfile(profile);
+          final hostDraftChanged =
+              previousProfile?.hostParkingDraftId !=
+                  profile.hostParkingDraftId ||
+              previousProfile?.setupDraftId != profile.setupDraftId ||
+              previousProfile?.setupStep != profile.setupStep;
+          if (!hostDraftChanged) return;
+
+          for (final oldDraftId in {
+            previousProfile?.hostParkingDraftId,
+            previousProfile?.setupDraftId,
+          }) {
+            if (oldDraftId == null ||
+                oldDraftId == profile.hostParkingDraftId ||
+                oldDraftId == profile.setupDraftId) {
+              continue;
+            }
+            ref
+                .read(hostSetupLaunchControllerProvider.notifier)
+                .clearCachedResumeCandidate(draftId: oldDraftId);
+          }
+          ref.invalidate(userSetupControllerProvider);
+          ref.invalidate(ownedParkingSpacesProvider);
         },
       )
       .subscribe((status, error) {

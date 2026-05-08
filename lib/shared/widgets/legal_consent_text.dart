@@ -2,15 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 class LegalConsentText extends StatelessWidget {
-  const LegalConsentText({super.key, this.textColor});
+  const LegalConsentText({super.key, this.textColor, this.linkColor});
 
   final Color? textColor;
+  final Color? linkColor;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final muted = textColor ?? const Color(0xFF6B6B6B);
-    final linkColor = textColor ?? const Color(0xFF0B0B0C);
+    final legalLinkColor = linkColor ?? const Color(0xFF151516);
     final mutedStyle = theme.textTheme.labelSmall?.copyWith(
       color: muted,
       fontSize: 10,
@@ -32,13 +33,13 @@ class LegalConsentText extends StatelessWidget {
           children: [
             _InlineLegalLink(
               label: 'Privacy Policy',
-              color: linkColor,
+              color: legalLinkColor,
               onTap: () => context.push('/privacy'),
             ),
             Text(' and ', textAlign: TextAlign.center, style: mutedStyle),
             _InlineLegalLink(
               label: 'Terms of Use',
-              color: linkColor,
+              color: legalLinkColor,
               onTap: () => context.push('/terms'),
             ),
           ],
@@ -71,10 +72,10 @@ class _InlineLegalLink extends StatelessWidget {
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
             color: color,
             fontWeight: FontWeight.w900,
-            fontSize: 10,
+            fontSize: 10.4,
             decoration: TextDecoration.underline,
             decorationColor: color,
-            decorationThickness: 1.4,
+            decorationThickness: 1.5,
             height: 1.5,
           ),
         ),

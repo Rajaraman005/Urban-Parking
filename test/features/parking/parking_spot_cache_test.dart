@@ -73,6 +73,17 @@ void main() {
     ]);
   });
 
+  test('parser does not inject a fake default photo when listing has none', () {
+    final spot = ParkingSpot.fromJson({
+      'id': 'spot-1',
+      'title': 'No photo spot',
+      'price': 80,
+    });
+
+    expect(spot.imageUrl, isEmpty);
+    expect(spot.imageUrls, isEmpty);
+  });
+
   test('parser keeps host profile metadata when available', () {
     final spot = ParkingSpot.fromJson({
       'id': 'spot-1',

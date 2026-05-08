@@ -8,6 +8,7 @@ import '../../../core/utils/app_logger.dart';
 import '../../../core/utils/geo_discovery/geo_types.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../home/presentation/home_nearby_controller.dart';
+import '../../user_setup/presentation/host_setup_launch_controller.dart';
 import '../../user_setup/presentation/user_setup_controller.dart';
 import '../data/owner_parking_repository_impl.dart';
 import '../domain/owner_parking_repository.dart';
@@ -52,7 +53,13 @@ class OwnerListingEditorController extends AsyncNotifier<void> {
   Future<void> deleteListing(String spotId) async {
     state = const AsyncLoading();
     final previous = ref.read(parkingListingSnapshotProvider(spotId));
-    ref.read(parkingListingStoreProvider.notifier).restore(spotId, null);
+    ref.read(parkingListingStoreProvider.notifier).markDeleted(spotId);
+    ref
+        .read(hostSetupLaunchControllerProvider.notifier)
+        .clearCachedResumeCandidate(draftId: spotId);
+    ref
+        .read(authControllerProvider.notifier)
+        .clearHostDraftReference(draftId: spotId);
     try {
       await _repository.deleteListing(spotId);
       state = const AsyncData(null);

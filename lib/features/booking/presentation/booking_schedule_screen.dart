@@ -1,11 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 
+import '../../../core/errors/app_failure.dart';
 import '../../../shared/formatters.dart';
+import '../../../shared/widgets/app_toast.dart';
 import '../../../shared/widgets/state_view.dart';
+import '../domain/booking.dart';
 import '../domain/booking_quote.dart';
 import '../../parking/domain/parking_spot.dart';
 import 'booking_controller.dart';
@@ -26,6 +32,7 @@ class BookingScheduleScreen extends ConsumerStatefulWidget {
 }
 
 class _BookingScheduleScreenState extends ConsumerState<BookingScheduleScreen> {
+  static const _uuid = Uuid();
   static const _darkOverlayStyle = SystemUiOverlayStyle(
     statusBarColor: Colors.black,
     statusBarBrightness: Brightness.dark,
@@ -37,6 +44,7 @@ class _BookingScheduleScreenState extends ConsumerState<BookingScheduleScreen> {
   DateTime? _focusedDay;
   bool _hasConfirmedEndTime = false;
   bool _hasConfirmedStartTime = false;
+  String? _reserveAttemptIdempotencyKey;
   DateTime? _selectedDay;
   String? _seededSpotId;
 
@@ -109,11 +117,14 @@ class _BookingScheduleScreenState extends ConsumerState<BookingScheduleScreen> {
                 );
           final hasCompletedTimeDetails =
               _hasConfirmedStartTime && _hasConfirmedEndTime;
+          final submitState = ref.watch(bookingSubmitControllerProvider);
+          final isSubmitting = submitState.isLoading;
           final canReserve =
               hasCompletedTimeDetails &&
               quoteAsync.hasValue &&
               !quoteAsync.isLoading &&
-              !quoteAsync.hasError;
+              !quoteAsync.hasError &&
+              !isSubmitting;
           final totalText = hasCompletedTimeDetails
               ? quoteAsync.maybeWhen(
                   data: (_) => displayQuote == null
@@ -127,10 +138,12 @@ class _BookingScheduleScreenState extends ConsumerState<BookingScheduleScreen> {
             title: 'Schedule Booking',
             onBack: _handleBack,
             bottomBar: _BookingBottomBar(
-              buttonLabel: 'Reserve Slot',
+              buttonLabel: isSubmitting ? 'Reserving...' : 'Reserve Slot',
               compactTotalText: !canReserve,
               totalText: totalText,
-              onTap: canReserve ? _showReserveMessage : null,
+              onTap: canReserve
+                  ? () => unawaited(_reserveSlot(spot, selection))
+                  : null,
             ),
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 28),
@@ -212,6 +225,7 @@ class _BookingScheduleScreenState extends ConsumerState<BookingScheduleScreen> {
                   onChanged: (kind) {
                     if (_selectedVehicleKind == kind) return;
                     setState(() {
+                      _reserveAttemptIdempotencyKey = null;
                       _selectedVehicleKind = kind;
                     });
                   },
@@ -234,6 +248,8 @@ class _BookingScheduleScreenState extends ConsumerState<BookingScheduleScreen> {
                   ),
                   windowLabel: _windowLabel(selection.startAt, selection.endAt),
                 ),
+                const SizedBox(height: 10),
+                const _LateArrivalPolicyNotice(),
               ],
             ),
           );
@@ -254,6 +270,7 @@ class _BookingScheduleScreenState extends ConsumerState<BookingScheduleScreen> {
     _selection = initial;
     _hasConfirmedEndTime = false;
     _hasConfirmedStartTime = false;
+    _reserveAttemptIdempotencyKey = null;
     _selectedVehicleKind = _defaultVehicleKindFor(spot);
     _selectedDay = initial == null ? null : _dateOnly(initial.startAt);
     _focusedDay = initial == null ? null : _dateOnly(initial.startAt);
@@ -278,6 +295,7 @@ class _BookingScheduleScreenState extends ConsumerState<BookingScheduleScreen> {
     setState(() {
       _hasConfirmedEndTime = false;
       _hasConfirmedStartTime = false;
+      _reserveAttemptIdempotencyKey = null;
       _selectedDay = _dateOnly(day);
       _focusedDay = _dateOnly(day);
       _selection = BookingTimeSelection(
@@ -338,20 +356,58 @@ class _BookingScheduleScreenState extends ConsumerState<BookingScheduleScreen> {
     setState(() {
       _hasConfirmedEndTime = true;
       _hasConfirmedStartTime = true;
+      _reserveAttemptIdempotencyKey = null;
       _selection = picked;
       _selectedDay = _dateOnly(picked.startAt);
       _focusedDay = _dateOnly(picked.startAt);
     });
   }
 
-  void _showReserveMessage() {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('Booking summary ready for confirmation.'),
-        ),
+  Future<void> _reserveSlot(
+    ParkingSpot spot,
+    BookingTimeSelection selection,
+  ) async {
+    final idempotencyKey = _reserveAttemptIdempotencyKey ?? _uuid.v4();
+    _reserveAttemptIdempotencyKey = idempotencyKey;
+
+    try {
+      final booking = await ref
+          .read(bookingSubmitControllerProvider.notifier)
+          .createBooking(
+            CreateBookingRequest(
+              endAt: selection.endAt,
+              idempotencyKey: idempotencyKey,
+              spotId: spot.id,
+              startAt: selection.startAt,
+              vehicleKind: _selectedVehicleKind.name,
+            ),
+          );
+      _reserveAttemptIdempotencyKey = null;
+      if (!mounted) return;
+      AppToast.success(
+        context,
+        booking.status == BookingStatus.pending
+            ? 'Request sent'
+            : 'Booking confirmed',
       );
+      await _showBookingResult(booking);
+    } catch (error) {
+      if (!mounted) return;
+      AppToast.error(context, _bookingErrorMessage(error));
+    }
+  }
+
+  Future<void> _showBookingResult(ParkingBooking booking) {
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => _BookingResultSheet(booking: booking),
+    );
+  }
+
+  String _bookingErrorMessage(Object error) {
+    if (error is AppFailure) return error.message;
+    return 'Could not reserve this slot. Please try again.';
   }
 
   String _timeLabel(DateTime value) {
@@ -458,6 +514,164 @@ class _BookingScheduleScreenState extends ConsumerState<BookingScheduleScreen> {
       return BookingVehicleKind.bike;
     }
     return BookingVehicleKind.car;
+  }
+}
+
+class _LateArrivalPolicyNotice extends StatelessWidget {
+  const _LateArrivalPolicyNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 2),
+      child: Text(
+        'Late arrivals may incur additional charges under the host policy.',
+        key: ValueKey('late-arrival-policy-notice'),
+        style: TextStyle(
+          color: Color(0xFFB42318),
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          height: 1.25,
+          letterSpacing: 0,
+        ),
+      ),
+    );
+  }
+}
+
+class _BookingResultSheet extends StatelessWidget {
+  const _BookingResultSheet({required this.booking});
+
+  final ParkingBooking booking;
+
+  @override
+  Widget build(BuildContext context) {
+    final isPending = booking.status == BookingStatus.pending;
+    final colors = Theme.of(context).colorScheme;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 6, 20, 22),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: isPending
+                    ? colors.tertiaryContainer
+                    : colors.primaryContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SizedBox(
+                width: 44,
+                height: 44,
+                child: Icon(
+                  isPending
+                      ? Icons.pending_actions_outlined
+                      : Icons.check_circle_outline_rounded,
+                  color: isPending
+                      ? colors.onTertiaryContainer
+                      : colors.onPrimaryContainer,
+                  size: 24,
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              isPending ? 'Request sent' : 'Booking confirmed',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: colors.onSurface,
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                height: 1,
+                letterSpacing: 0,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              isPending
+                  ? 'The host has 24 hours to approve or reject this booking.'
+                  : 'Your parking slot is approved for this time window.',
+              style: TextStyle(
+                color: colors.onSurfaceVariant,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                height: 1.35,
+                letterSpacing: 0,
+              ),
+            ),
+            const SizedBox(height: 18),
+            _ResultFact(
+              icon: Icons.schedule_rounded,
+              label: _resultWindowLabel(booking.startAt, booking.endAt),
+            ),
+            const SizedBox(height: 10),
+            _ResultFact(
+              icon: Icons.payments_outlined,
+              label: formatMoney(booking.total, booking.currency),
+            ),
+            const SizedBox(height: 18),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(50),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _resultWindowLabel(DateTime startAt, DateTime endAt) {
+    final sameDay =
+        startAt.year == endAt.year &&
+        startAt.month == endAt.month &&
+        startAt.day == endAt.day;
+    final start = DateFormat('EEE, d MMM h:mm a').format(startAt);
+    final end = sameDay
+        ? DateFormat('h:mm a').format(endAt)
+        : DateFormat('EEE, d MMM h:mm a').format(endAt);
+    return '$start to $end';
+  }
+}
+
+class _ResultFact extends StatelessWidget {
+  const _ResultFact({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Icon(icon, color: colors.onSurfaceVariant, size: 17),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: colors.onSurface,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              height: 1.25,
+              letterSpacing: 0,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -712,17 +926,6 @@ class _BookingBottomBar extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Late arrivals may incur additional charges under the host policy.',
-                style: TextStyle(
-                  color: const Color(0xFFB42318),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  height: 1.25,
-                  letterSpacing: 0,
-                ),
-              ),
-              const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(

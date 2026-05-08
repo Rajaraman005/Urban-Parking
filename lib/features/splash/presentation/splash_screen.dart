@@ -48,6 +48,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     switch (profile?.setupStep) {
       case 'profile':
         return '/setup/profile';
+      case 'vehicle_details':
+        return '/setup/vehicle';
       case 'host_basics':
         return '/setup/host-basics';
       case 'host_pricing':

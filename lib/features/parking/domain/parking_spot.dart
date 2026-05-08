@@ -117,6 +117,7 @@ class ParkingSpot {
     String? availabilitySummary,
     BookingCadence? cadence,
     String? city,
+    bool clearHostPhone = false,
     String? currency,
     int? dailyEndMinute,
     int? dailyStartMinute,
@@ -171,7 +172,7 @@ class ParkingSpot {
     description: description ?? this.description,
     hostAvatarUrl: hostAvatarUrl ?? this.hostAvatarUrl,
     hostName: hostName ?? this.hostName,
-    hostPhone: hostPhone ?? this.hostPhone,
+    hostPhone: clearHostPhone ? null : hostPhone ?? this.hostPhone,
     hostRole: hostRole ?? this.hostRole,
     isHostedByCurrentUser: isHostedByCurrentUser ?? this.isHostedByCurrentUser,
     listingRevision: listingRevision ?? this.listingRevision,
@@ -255,8 +256,7 @@ class ParkingSpot {
   static ParkingSpot fromJson(Object? json) {
     final map = Map<String, Object?>.from(json as Map);
     final imageUrl =
-        map['imageUrl']?.toString() ??
-        'https://images.unsplash.com/photo-1506521781263-d8422e82f27a';
+        _firstStringFrom(map, const ['imageUrl', 'image_url']) ?? '';
     final availabilitySummary = _firstStringFrom(map, const [
       'availabilitySummary',
       'availability_summary',

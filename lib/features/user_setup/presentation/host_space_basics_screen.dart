@@ -15,13 +15,20 @@ import '../../../shared/widgets/app_toast.dart';
 import '../../../shared/widgets/state_view.dart';
 import '../../parking/domain/owner_parking_repository.dart';
 import '../domain/user_setup_state.dart';
+import 'host_setup_launcher.dart';
+import 'host_setup_launch_controller.dart';
 import 'user_setup_controller.dart';
 import 'widgets/host_setup_app_bar.dart';
 
 class HostSpaceBasicsScreen extends ConsumerStatefulWidget {
-  const HostSpaceBasicsScreen({super.key, this.createNew = false});
+  const HostSpaceBasicsScreen({
+    super.key,
+    this.createNew = false,
+    this.instantLaunch = false,
+  });
 
   final bool createNew;
+  final bool instantLaunch;
 
   @override
   ConsumerState<HostSpaceBasicsScreen> createState() =>
@@ -61,7 +68,14 @@ class _HostSpaceBasicsScreenState extends ConsumerState<HostSpaceBasicsScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureDraft());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (widget.instantLaunch) {
+        ref.read(hostSetupLaunchControllerProvider.notifier).markFirstFrame();
+        return;
+      }
+      _ensureDraft();
+    });
   }
 
   @override
@@ -80,16 +94,45 @@ class _HostSpaceBasicsScreenState extends ConsumerState<HostSpaceBasicsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<HostSetupLaunchState>(hostSetupLaunchControllerProvider, (
+      previous,
+      next,
+    ) {
+      if (!widget.instantLaunch || !mounted) return;
+      if (next.phase == HostSetupLaunchPhase.failed &&
+          previous?.errorMessage != next.errorMessage &&
+          next.errorMessage != null) {
+        AppToast.error(context, next.errorMessage!);
+      }
+      if (next.shouldAutoRoute &&
+          next.activeStep != null &&
+          next.activeStep != 'host_basics') {
+        ref.read(hostSetupLaunchControllerProvider.notifier).clearAutoRoute();
+        context.go(routeForHostSetupStep(next.activeStep));
+      }
+    });
+
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
-    final setupValue = ref.watch(userSetupControllerProvider);
-    final setupState = setupValue.value;
-    final draft = widget.createNew && !_freshDraftReady
+    final launchState = ref.watch(hostSetupLaunchControllerProvider);
+    final shouldReadSetupDraft =
+        !widget.instantLaunch ||
+        launchState.phase == HostSetupLaunchPhase.draftReady;
+    final setupValue = shouldReadSetupDraft
+        ? ref.watch(userSetupControllerProvider)
+        : null;
+    final setupState = setupValue?.value;
+    final draft =
+        !shouldReadSetupDraft ||
+            (widget.createNew && !_freshDraftReady && !widget.instantLaunch)
         ? null
         : setupState?.draft;
     if (draft != null && _shouldSeed(draft)) _seed(draft);
+    final isLaunchPreparing =
+        widget.instantLaunch && launchState.shouldBlockInitialSave;
 
-    if (!widget.createNew &&
-        (setupValue.isLoading || _isEnsuringDraft) &&
+    if (!widget.instantLaunch &&
+        !widget.createNew &&
+        ((setupValue?.isLoading ?? false) || _isEnsuringDraft) &&
         draft == null) {
       return AppScreen(
         padded: false,
@@ -138,6 +181,7 @@ class _HostSpaceBasicsScreenState extends ConsumerState<HostSpaceBasicsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   AddressSearchMapPicker<ParkingAddressCandidate>(
+                    deferMapPreview: widget.instantLaunch,
                     enabled: !_isSaving,
                     fallbackLocation: AppConstants.chennaiCenter,
                     isLocating: _isLocating,
@@ -319,7 +363,10 @@ class _HostSpaceBasicsScreenState extends ConsumerState<HostSpaceBasicsScreen> {
                 onPressed:
                     _isSaving ||
                         _isEnsuringDraft ||
-                        (widget.createNew && !_freshDraftReady)
+                        isLaunchPreparing ||
+                        (widget.createNew &&
+                            !_freshDraftReady &&
+                            !widget.instantLaunch)
                     ? null
                     : _saveBasics,
                 style: FilledButton.styleFrom(
@@ -345,7 +392,10 @@ class _HostSpaceBasicsScreenState extends ConsumerState<HostSpaceBasicsScreen> {
                       )
                     : Text(
                         _isEnsuringDraft ||
-                                (widget.createNew && !_freshDraftReady)
+                                isLaunchPreparing ||
+                                (widget.createNew &&
+                                    !_freshDraftReady &&
+                                    !widget.instantLaunch)
                             ? 'Preparing draft'
                             : 'Save basics',
                       ),
@@ -645,6 +695,7 @@ class _HostSpaceBasicsScreenState extends ConsumerState<HostSpaceBasicsScreen> {
 
   Future<void> _ensureDraft() async {
     if (_isEnsuringDraft || _requestedDraft) return;
+    if (widget.instantLaunch) return;
     final setup = ref.read(userSetupControllerProvider).value;
     if (!widget.createNew && setup?.draft != null) return;
     _requestedDraft = true;

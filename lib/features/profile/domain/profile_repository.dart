@@ -2,6 +2,18 @@ import 'dart:typed_data';
 
 import '../../auth/domain/auth_state.dart';
 
+class ProfileBookingControlsUpdate {
+  const ProfileBookingControlsUpdate({
+    required this.bookingApprovalMode,
+    required this.expectedVersion,
+    required this.showPhoneNumber,
+  });
+
+  final BookingApprovalMode bookingApprovalMode;
+  final int expectedVersion;
+  final bool showPhoneNumber;
+}
+
 class ProfileDetailsUpdate {
   const ProfileDetailsUpdate({
     required this.expectedVersion,
@@ -37,5 +49,8 @@ class ProfileAvatarUploadCandidate {
 abstract interface class ProfileRepository {
   Future<UserProfile> reload();
   Future<UserProfile> updateAvatar(ProfileAvatarUploadCandidate image);
+  Future<UserProfile> updateBookingControls(
+    ProfileBookingControlsUpdate update,
+  );
   Future<UserProfile> updatePersonalDetails(ProfileDetailsUpdate update);
 }

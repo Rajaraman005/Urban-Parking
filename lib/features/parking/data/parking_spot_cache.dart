@@ -6,6 +6,8 @@ class ParkingSpotCache {
 
   ParkingSpot? getById(String id) => _spotsById[id];
 
+  void clear() => _spotsById.clear();
+
   void upsert(ParkingSpot spot) {
     if (spot.id.trim().isEmpty) return;
     _spotsById[spot.id] = spot;
