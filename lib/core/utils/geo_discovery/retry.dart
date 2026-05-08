@@ -48,7 +48,9 @@ Future<T> withGeoRetry<T>(
       final jitterMs = math.Random().nextInt(
         math.max(capped.inMilliseconds, 1),
       );
-      final delay = Duration(milliseconds: jitterMs);
+      final delay = geoError.retryAfter == null
+          ? Duration(milliseconds: jitterMs)
+          : capped;
 
       telemetry.warn(TelemetryEvent.geoSearchFailed, {
         'code': geoError.code.apiValue,

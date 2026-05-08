@@ -4,6 +4,7 @@ import '../../../config/app_config.dart';
 import '../../../config/geo_discovery_config.dart';
 import '../../../features/parking/data/mock_parking_data.dart';
 import '../../../features/parking/domain/parking_spot.dart';
+import '../../errors/app_failure.dart';
 import '../../network/api_client.dart';
 import '../telemetry.dart';
 import 'distance.dart';
@@ -41,7 +42,7 @@ class RestMarketplaceDataSource implements MarketplaceDataSource {
         'sourceMode': AppConfig.geoRuntimeMode,
         'status': 'rest_transport_error',
       });
-      throw _geoDiscoveryErrorFor(failure.message, failure.code);
+      throw _geoDiscoveryErrorFor(failure);
     } catch (error) {
       final failure = ApiClient.toFailure(error);
       telemetry.warn(TelemetryEvent.geoSearchFailed, {
@@ -51,20 +52,21 @@ class RestMarketplaceDataSource implements MarketplaceDataSource {
         'sourceMode': AppConfig.geoRuntimeMode,
         'status': 'rest_decode_error',
       });
-      throw _geoDiscoveryErrorFor(failure.message, failure.code);
+      throw _geoDiscoveryErrorFor(failure);
     }
   }
 }
 
-GeoDiscoveryError _geoDiscoveryErrorFor(String message, String? apiCode) {
-  final parsedCode = GeoFailureCode.fromApi(apiCode);
+GeoDiscoveryError _geoDiscoveryErrorFor(AppFailure failure) {
+  final parsedCode = GeoFailureCode.fromApi(failure.code);
   final code = parsedCode == GeoFailureCode.unknown
       ? GeoFailureCode.networkError
       : parsedCode;
   return GeoDiscoveryError(
-    _geoDiscoveryMessage(message, code),
+    _geoDiscoveryMessage(failure.message, code),
     code: code,
-    retryable: _isRetryableGeoFailure(code),
+    retryAfter: failure is NetworkFailure ? failure.retryAfter : null,
+    retryable: failure.retryable && _isRetryableGeoFailure(code),
   );
 }
 
@@ -77,6 +79,8 @@ String _geoDiscoveryMessage(String message, GeoFailureCode code) {
       return 'Nearby discovery is temporarily unavailable while search data is being updated.';
     case GeoFailureCode.schemaVersionUnsupported:
       return 'Nearby discovery needs an app update before it can search.';
+    case GeoFailureCode.deploymentConfigError:
+      return 'Nearby discovery is temporarily unavailable because the mobile API is not deployed correctly.';
     default:
       return message;
   }
@@ -90,6 +94,7 @@ bool _isRetryableGeoFailure(GeoFailureCode code) {
     case GeoFailureCode.rateLimited:
     case GeoFailureCode.unknown:
       return true;
+    case GeoFailureCode.deploymentConfigError:
     default:
       return false;
   }

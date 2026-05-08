@@ -10,7 +10,14 @@ sealed class AppFailure implements Exception {
 }
 
 class NetworkFailure extends AppFailure {
-  const NetworkFailure(super.message, {super.code, super.retryable = true});
+  const NetworkFailure(
+    super.message, {
+    super.code,
+    this.retryAfter,
+    super.retryable = true,
+  });
+
+  final Duration? retryAfter;
 }
 
 class ValidationFailure extends AppFailure {

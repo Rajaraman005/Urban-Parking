@@ -17,6 +17,7 @@ class GeoDiscoveryConfig {
   static const persistentMaxEntries = 250;
   static const persistentMaxBytes = 25 * 1024 * 1024;
   static const minRequestInterval = Duration(milliseconds: 600);
+  static const failureCooldown = Duration(seconds: 30);
   static const retryDelays = [
     Duration(milliseconds: 500),
     Duration(seconds: 1),

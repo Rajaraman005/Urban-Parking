@@ -91,6 +91,39 @@ void main() {
     expect(repository.calls, 1);
   });
 
+  test(
+    'engine suppresses duplicate failed fingerprints during cooldown',
+    () async {
+      final repository = _FailingGeoRepository(
+        const GeoDiscoveryError(
+          'Mobile API route is not deployed.',
+          code: GeoFailureCode.deploymentConfigError,
+          retryable: false,
+        ),
+      );
+      final engine = GeoDiscoveryEngine(
+        repository: repository,
+        cache: GeoDiscoveryCache(),
+      );
+      const query = GeoDiscoveryBatchQuery(
+        latitude: 13.0827,
+        longitude: 80.2707,
+        serviceTypes: [ServiceType.parking],
+      );
+
+      await expectLater(
+        engine.getNearbyBatch(query),
+        throwsA(isA<GeoDiscoveryError>()),
+      );
+      await expectLater(
+        engine.getNearbyBatch(query),
+        throwsA(isA<GeoDiscoveryError>()),
+      );
+
+      expect(repository.calls, 1);
+    },
+  );
+
   test('geo discovery errors stringify to user-facing messages', () {
     const error = GeoDiscoveryError(
       'Nearby discovery is temporarily unavailable.',

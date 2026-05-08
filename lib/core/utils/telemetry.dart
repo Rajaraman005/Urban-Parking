@@ -17,6 +17,8 @@ enum TelemetryEvent {
   geoCacheHit('geo_cache_hit'),
   geoCacheStaleServed('geo_cache_stale_served'),
   geoRateLimited('geo_rate_limited'),
+  geoRetryCooldownTriggered('geo_retry_cooldown_triggered'),
+  geoDeploymentMisconfiguration('deployment_misconfiguration'),
   geoSearchSucceeded('geo_search_succeeded'),
   geoSearchFailed('geo_search_failed'),
   geoCursorInvalidated('geo_cursor_invalidated'),

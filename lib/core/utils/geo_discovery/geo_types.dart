@@ -64,6 +64,7 @@ enum GeoFailureCode {
   backendTimeout,
   contractMismatch,
   databaseError,
+  deploymentConfigError,
   gpsDenied,
   gpsTimeout,
   invalidCursor,
@@ -82,6 +83,8 @@ enum GeoFailureCode {
         return 'contract_mismatch';
       case GeoFailureCode.databaseError:
         return 'database_error';
+      case GeoFailureCode.deploymentConfigError:
+        return 'deployment_misconfiguration';
       case GeoFailureCode.gpsDenied:
         return 'gps_denied';
       case GeoFailureCode.gpsTimeout:

@@ -72,6 +72,8 @@ class SearchScreen extends ConsumerWidget {
                 final items = page?.items ?? const [];
                 return Column(
                   children: [
+                    if (state.isRefreshingWithData)
+                      const LinearProgressIndicator(minHeight: 2),
                     SizedBox(
                       height: 220,
                       child: Padding(

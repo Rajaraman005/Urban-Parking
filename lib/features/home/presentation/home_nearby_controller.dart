@@ -11,6 +11,8 @@ final homeNearbyControllerProvider =
       HomeNearbyController.new,
     );
 
+enum HomeNearbyLoadPhase { idle, loadingEmpty, loadingWithData, loaded, error }
+
 class HomeNearbyViewState {
   const HomeNearbyViewState({
     required this.center,
@@ -19,6 +21,7 @@ class HomeNearbyViewState {
     required this.permissionDenied,
     required this.isFallbackLocation,
     required this.isStale,
+    this.phase = HomeNearbyLoadPhase.loaded,
     this.message,
   });
 
@@ -28,9 +31,31 @@ class HomeNearbyViewState {
   final List<GeoDiscoveryEntity<Map<String, Object?>>> items;
   final String? message;
   final List<GeoDiscoveryPartialFailure> partialFailures;
+  final HomeNearbyLoadPhase phase;
   final bool permissionDenied;
 
   bool get hasPartialFailures => partialFailures.isNotEmpty;
+  bool get isRefreshingWithData => phase == HomeNearbyLoadPhase.loadingWithData;
+
+  HomeNearbyViewState copyWith({
+    GeoPoint? center,
+    bool? isFallbackLocation,
+    bool? isStale,
+    List<GeoDiscoveryEntity<Map<String, Object?>>>? items,
+    String? message,
+    List<GeoDiscoveryPartialFailure>? partialFailures,
+    HomeNearbyLoadPhase? phase,
+    bool? permissionDenied,
+  }) => HomeNearbyViewState(
+    center: center ?? this.center,
+    items: items ?? this.items,
+    partialFailures: partialFailures ?? this.partialFailures,
+    permissionDenied: permissionDenied ?? this.permissionDenied,
+    isFallbackLocation: isFallbackLocation ?? this.isFallbackLocation,
+    isStale: isStale ?? this.isStale,
+    message: message ?? this.message,
+    phase: phase ?? this.phase,
+  );
 }
 
 class HomeNearbyController extends AsyncNotifier<HomeNearbyViewState> {
@@ -43,8 +68,29 @@ class HomeNearbyController extends AsyncNotifier<HomeNearbyViewState> {
   }
 
   Future<void> refresh() async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(_load);
+    final previous = state.value;
+    if (previous != null && previous.items.isNotEmpty) {
+      state = AsyncData(
+        previous.copyWith(phase: HomeNearbyLoadPhase.loadingWithData),
+      );
+    } else {
+      state = const AsyncLoading();
+    }
+
+    try {
+      state = AsyncData(await _load());
+    } catch (error, stackTrace) {
+      if (previous != null && previous.items.isNotEmpty) {
+        state = AsyncData(
+          previous.copyWith(
+            message: error.toString(),
+            phase: HomeNearbyLoadPhase.error,
+          ),
+        );
+      } else {
+        state = AsyncError(error, stackTrace);
+      }
+    }
   }
 
   Future<HomeNearbyViewState> _load() async {
@@ -63,6 +109,7 @@ class HomeNearbyController extends AsyncNotifier<HomeNearbyViewState> {
         isFallbackLocation: false,
         isStale: false,
         message: locationState.error,
+        phase: HomeNearbyLoadPhase.loaded,
       );
     }
 
@@ -106,6 +153,7 @@ class HomeNearbyController extends AsyncNotifier<HomeNearbyViewState> {
       isFallbackLocation: locationState.isFallback,
       isStale: pages.any((page) => page.isStale),
       message: locationState.error,
+      phase: HomeNearbyLoadPhase.loaded,
     );
   }
 }

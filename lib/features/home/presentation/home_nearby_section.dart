@@ -241,6 +241,10 @@ class _HomeNearbyResults extends ConsumerWidget {
 
     return Column(
       children: [
+        if (state.isRefreshingWithData) ...[
+          const LinearProgressIndicator(minHeight: 2),
+          const SizedBox(height: 12),
+        ],
         if (state.isStale ||
             state.hasPartialFailures ||
             state.isFallbackLocation ||

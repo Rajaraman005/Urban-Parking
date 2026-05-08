@@ -20,6 +20,9 @@ class GeoDiscoveryEngine {
   final GeoDiscoveryCache _cache;
   final _inFlight =
       <String, Future<GeoDiscoveryBatchResult<Map<String, Object?>>>>{};
+  final _lastFailedAtByFingerprint = <String, DateTime>{};
+  final _lastSuccessfulByKey =
+      <String, GeoDiscoveryBatchResult<Map<String, Object?>>>{};
   final _rateGuard = GeoRequestRateGuard();
 
   Future<GeoDiscoveryPage<Map<String, Object?>>> getNearby(
@@ -94,6 +97,8 @@ class GeoDiscoveryEngine {
     final cached = _cache.get(key);
 
     if (cached.freshness == CacheFreshness.fresh && cached.value != null) {
+      _lastFailedAtByFingerprint.remove(normalized.queryFingerprint);
+      _lastSuccessfulByKey[key] = cached.value!;
       telemetry.event(TelemetryEvent.geoCacheHit, {
         'cacheHit': true,
         'geocell': normalized.roundedGeocell,
@@ -105,6 +110,15 @@ class GeoDiscoveryEngine {
       return _markBatch(cached.value!, isStale: false);
     }
 
+    final cooldownFallback = _cooldownFallbackFor(
+      key,
+      normalized,
+      cached.value,
+    );
+    if (cooldownFallback != null) {
+      return cooldownFallback;
+    }
+
     try {
       final result = await _fetchNetwork(
         normalized,
@@ -112,6 +126,8 @@ class GeoDiscoveryEngine {
         cancelToken: cancelToken,
       );
       await _cache.set(key, result);
+      _lastFailedAtByFingerprint.remove(normalized.queryFingerprint);
+      _lastSuccessfulByKey[key] = result;
       return result;
     } catch (error) {
       final geoError = toGeoDiscoveryError(error);
@@ -152,6 +168,8 @@ class GeoDiscoveryEngine {
       }
 
       if (cached.freshness == CacheFreshness.stale && cached.value != null) {
+        _lastFailedAtByFingerprint[normalized.queryFingerprint] =
+            DateTime.now();
         telemetry.warn(TelemetryEvent.geoCacheStaleServed, {
           'code': geoError.code.apiValue,
           'geocell': normalized.roundedGeocell,
@@ -161,6 +179,14 @@ class GeoDiscoveryEngine {
         return _markBatch(cached.value!, isStale: true);
       }
 
+      _lastFailedAtByFingerprint[normalized.queryFingerprint] = DateTime.now();
+      if (geoError.code == GeoFailureCode.deploymentConfigError) {
+        telemetry.error(TelemetryEvent.geoDeploymentMisconfiguration, {
+          'code': geoError.code.apiValue,
+          'geocell': normalized.roundedGeocell,
+          'queryFingerprint': normalized.queryFingerprint,
+        });
+      }
       telemetry.error(TelemetryEvent.geoSearchFailed, {
         'code': geoError.code.apiValue,
         'geocell': normalized.roundedGeocell,
@@ -169,6 +195,40 @@ class GeoDiscoveryEngine {
       });
       throw geoError;
     }
+  }
+
+  GeoDiscoveryBatchResult<Map<String, Object?>>? _cooldownFallbackFor(
+    String key,
+    GeoDiscoveryNormalizedQuery normalized,
+    GeoDiscoveryBatchResult<Map<String, Object?>>? cachedValue,
+  ) {
+    final failedAt = _lastFailedAtByFingerprint[normalized.queryFingerprint];
+    if (failedAt == null) return null;
+
+    final elapsed = DateTime.now().difference(failedAt);
+    if (elapsed >= GeoDiscoveryConfig.failureCooldown) {
+      _lastFailedAtByFingerprint.remove(normalized.queryFingerprint);
+      return null;
+    }
+
+    final fallback = cachedValue ?? _lastSuccessfulByKey[key];
+    telemetry.warn(TelemetryEvent.geoRetryCooldownTriggered, {
+      'durationMs':
+          (GeoDiscoveryConfig.failureCooldown - elapsed).inMilliseconds,
+      'geocell': normalized.roundedGeocell,
+      'queryFingerprint': normalized.queryFingerprint,
+      'status': fallback == null ? 'blocked_without_cache' : 'served_cache',
+    });
+
+    if (fallback != null) {
+      return _markBatch(fallback, isStale: true);
+    }
+
+    throw const GeoDiscoveryError(
+      'Nearby discovery is cooling down after a failed request.',
+      code: GeoFailureCode.networkError,
+      retryable: false,
+    );
   }
 
   Future<GeoDiscoveryBatchResult<Map<String, Object?>>> _fetchNetwork(

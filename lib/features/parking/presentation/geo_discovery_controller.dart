@@ -25,12 +25,21 @@ final geoDiscoveryControllerProvider =
       GeoDiscoveryController.new,
     );
 
+enum GeoDiscoveryLoadPhase {
+  idle,
+  loadingEmpty,
+  loadingWithData,
+  loaded,
+  error,
+}
+
 class GeoDiscoveryViewState {
   const GeoDiscoveryViewState({
     required this.center,
     required this.result,
     required this.permissionDenied,
     required this.isFallbackLocation,
+    this.phase = GeoDiscoveryLoadPhase.loaded,
     this.message,
   });
 
@@ -38,6 +47,7 @@ class GeoDiscoveryViewState {
   final GeoDiscoveryBatchResult<Map<String, Object?>>? result;
   final bool permissionDenied;
   final bool isFallbackLocation;
+  final GeoDiscoveryLoadPhase phase;
   final String? message;
 
   List<GeoDiscoveryPartialFailure> failuresFor(ServiceType serviceType) =>
@@ -45,6 +55,25 @@ class GeoDiscoveryViewState {
           .where((failure) => failure.serviceType == serviceType)
           .toList() ??
       const [];
+
+  bool get isRefreshingWithData =>
+      phase == GeoDiscoveryLoadPhase.loadingWithData;
+
+  GeoDiscoveryViewState copyWith({
+    GeoPoint? center,
+    GeoDiscoveryBatchResult<Map<String, Object?>>? result,
+    bool? permissionDenied,
+    bool? isFallbackLocation,
+    GeoDiscoveryLoadPhase? phase,
+    String? message,
+  }) => GeoDiscoveryViewState(
+    center: center ?? this.center,
+    result: result ?? this.result,
+    permissionDenied: permissionDenied ?? this.permissionDenied,
+    isFallbackLocation: isFallbackLocation ?? this.isFallbackLocation,
+    phase: phase ?? this.phase,
+    message: message ?? this.message,
+  );
 }
 
 class GeoDiscoveryController extends AsyncNotifier<GeoDiscoveryViewState> {
@@ -57,8 +86,29 @@ class GeoDiscoveryController extends AsyncNotifier<GeoDiscoveryViewState> {
   }
 
   Future<void> refresh() async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(_load);
+    final previous = state.value;
+    if (previous?.result != null) {
+      state = AsyncData(
+        previous!.copyWith(phase: GeoDiscoveryLoadPhase.loadingWithData),
+      );
+    } else {
+      state = const AsyncLoading();
+    }
+
+    try {
+      state = AsyncData(await _load());
+    } catch (error, stackTrace) {
+      if (previous?.result != null) {
+        state = AsyncData(
+          previous!.copyWith(
+            message: error.toString(),
+            phase: GeoDiscoveryLoadPhase.error,
+          ),
+        );
+      } else {
+        state = AsyncError(error, stackTrace);
+      }
+    }
   }
 
   Future<GeoDiscoveryViewState> _load() async {
@@ -74,6 +124,7 @@ class GeoDiscoveryController extends AsyncNotifier<GeoDiscoveryViewState> {
         permissionDenied: locationState.permissionDenied,
         isFallbackLocation: false,
         message: locationState.error,
+        phase: GeoDiscoveryLoadPhase.loaded,
       );
     }
 
@@ -104,6 +155,7 @@ class GeoDiscoveryController extends AsyncNotifier<GeoDiscoveryViewState> {
       permissionDenied: locationState.permissionDenied,
       isFallbackLocation: locationState.isFallback,
       message: locationState.error,
+      phase: GeoDiscoveryLoadPhase.loaded,
     );
   }
 }

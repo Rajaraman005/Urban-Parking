@@ -56,6 +56,8 @@ repositories compose REST/Supabase data sources.
 
 Operational targets and rollout rules live in
 `docs/flutter_migration_operating_model.md`.
+Mobile API deployment, smoke tests, alert thresholds, and rollback steps live in
+`docs/mobile-api-runbook.md`.
 
 ### Geo Discovery Deployment Checklist
 
@@ -70,9 +72,10 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
 The geo search endpoint also expects the Supabase migrations in
 `supabase/migrations/` to be applied, especially
-`202605060001_geo_discovery_public_search_repair.sql`. If that migration is
-not deployed, the API can still use its service-role table fallback, but only
-when `SUPABASE_SERVICE_ROLE_KEY` is configured on the API host.
+`202605060001_geo_discovery_public_search_repair.sql` and
+`202605080002_mobile_api_timeout_guards.sql`. Apply the timeout guard migration
+before promoting the Next mobile API routes so database-side cancellation
+happens before Vercel's function timeout.
 
 ## Environment
 
