@@ -25,7 +25,7 @@ const serviceRoleKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
 const cloudinaryCloudName = requiredEnv("CLOUDINARY_CLOUD_NAME");
 const cloudinaryApiKey = requiredEnv("CLOUDINARY_API_KEY");
 const cloudinaryApiSecret = requiredEnv("CLOUDINARY_API_SECRET");
-const profileAvatarFolder = Deno.env.get("CLOUDINARY_PROFILE_AVATAR_FOLDER") ?? "urban-parking/profile-avatars";
+const profileAvatarFolder = Deno.env.get("CLOUDINARY_PROFILE_AVATAR_FOLDER") ?? "lotzi/profile-avatars";
 
 const admin = createClient(supabaseUrl, serviceRoleKey, {
   auth: {

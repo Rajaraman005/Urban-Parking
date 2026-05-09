@@ -121,7 +121,7 @@ class ProfileScreen extends ConsumerWidget {
                 _ProfileActionTile(
                   icon: Icons.description_outlined,
                   title: 'Terms of use',
-                  subtitle: 'Urban Parking service terms',
+                  subtitle: 'Lotzi service terms',
                   onTap: () => context.push('/terms'),
                 ),
               ],
@@ -335,7 +335,7 @@ class _ProfileBrandHeader extends StatelessWidget {
       child: Padding(
         padding: EdgeInsets.only(top: 8),
         child: Text(
-          'Urban Parking',
+          'Lotzi',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(

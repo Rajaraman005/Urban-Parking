@@ -17,7 +17,7 @@ export function AdminShell({ admin, children }: { admin: AdminUserDTO; children:
       <aside className="fixed inset-y-0 left-0 hidden w-[17.5rem] border-r border-zinc-200/80 bg-white lg:block">
         <div className="flex h-full flex-col">
           <div className="border-b border-zinc-200/80 px-6 py-6">
-            <div className="text-[15px] font-extrabold uppercase text-zinc-950">Urban Parking</div>
+            <div className="text-[15px] font-extrabold uppercase text-zinc-950">Lotzi</div>
             <div className="mt-1 text-[13px] font-medium text-zinc-500">Admin console</div>
           </div>
           <nav className="flex-1 space-y-1.5 px-4 py-5">
@@ -50,7 +50,7 @@ export function AdminShell({ admin, children }: { admin: AdminUserDTO; children:
         <header className="sticky top-0 z-30 border-b border-zinc-200/80 bg-white/90 backdrop-blur">
           <div className="flex min-h-[72px] items-center justify-between gap-4 px-5 lg:px-10">
             <div>
-              <div className="text-sm font-semibold text-zinc-950 lg:hidden">Urban Parking Admin</div>
+              <div className="text-sm font-semibold text-zinc-950 lg:hidden">Lotzi Admin</div>
               <div className="hidden text-[13px] font-medium text-zinc-500 lg:block">Secure listing review workflow</div>
             </div>
             <div className="flex items-center gap-3">

@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Urban Parking Admin",
-  description: "Admin review console for Urban Parking listings"
+  title: "Lotzi Admin",
+  description: "Admin review console for Lotzi listings"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

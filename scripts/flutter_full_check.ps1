@@ -49,7 +49,7 @@ function Invoke-Step {
 $flutter = Resolve-FlutterExecutable
 $dart = Resolve-DartExecutable $flutter
 
-Write-Host "Urban Parking Flutter verification" -ForegroundColor Green
+Write-Host "Lotzi Flutter verification" -ForegroundColor Green
 Write-Host "Flutter: $flutter"
 Write-Host "Dart: $dart"
 

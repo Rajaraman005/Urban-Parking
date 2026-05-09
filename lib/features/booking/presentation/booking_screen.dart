@@ -81,7 +81,7 @@ class _PropertyDetailsContent extends ConsumerWidget {
         ? ref.watch(currentProfileDisplayProvider)
         : null;
     final hostName =
-        profileDisplay?.displayName ?? spot.hostName ?? 'Urban Parking Host';
+        profileDisplay?.displayName ?? spot.hostName ?? 'Lotzi Host';
     final hostAvatarUrl = profileDisplay?.avatarUrl ?? spot.hostAvatarUrl;
     final hostPhone = profileDisplay?.phone ?? spot.hostPhone;
 

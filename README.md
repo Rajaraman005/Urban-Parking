@@ -1,6 +1,6 @@
-# Urban Parking Flutter
+# Lotzi Flutter
 
-Production Flutter migration of the Urban Parking marketplace.
+Production Flutter migration of the Lotzi marketplace.
 
 ## Stack
 

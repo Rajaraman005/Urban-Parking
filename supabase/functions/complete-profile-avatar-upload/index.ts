@@ -21,7 +21,7 @@ const requiredEnv = (key: string) => {
 
 const supabaseUrl = requiredEnv("SUPABASE_URL");
 const serviceRoleKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
-const profileAvatarFolder = Deno.env.get("CLOUDINARY_PROFILE_AVATAR_FOLDER") ?? "urban-parking/profile-avatars";
+const profileAvatarFolder = Deno.env.get("CLOUDINARY_PROFILE_AVATAR_FOLDER") ?? "lotzi/profile-avatars";
 
 const admin = createClient(supabaseUrl, serviceRoleKey, {
   auth: {

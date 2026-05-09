@@ -47,7 +47,7 @@ class UserSetupIntentScreen extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'How will you use Urban Parking?',
+            'How will you use Lotzi?',
             style: Theme.of(
               context,
             ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
@@ -468,7 +468,7 @@ class _UserSetupProfileScreenState
     final gender = _gender;
 
     if (intent != 'park' && intent != 'host') {
-      _setError('Choose how you want to use Urban Parking first.');
+      _setError('Choose how you want to use Lotzi first.');
       return;
     }
     if (gender == null || gender.isEmpty) {

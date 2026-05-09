@@ -45,8 +45,8 @@ const corsAllowedHeaders =
 const corsAllowedMethods = "GET, POST, OPTIONS";
 const corsExposedHeaders = "X-Request-ID, Retry-After";
 const defaultAllowedOrigins = new Set([
-  "https://flowaux.in",
-  "https://www.flowaux.in",
+  "https://lotzi.in",
+  "https://www.lotzi.in",
 ]);
 
 export class MobileApiError extends Error {
@@ -266,7 +266,7 @@ function corsOriginFor(origin: string | null) {
   if (origin && allowedOrigins().has(origin)) {
     return origin;
   }
-  return "https://flowaux.in";
+  return "https://lotzi.in";
 }
 
 function isAllowedOrigin(origin: string | null) {

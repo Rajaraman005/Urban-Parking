@@ -5,7 +5,7 @@
 Before this fix, production returned the admin 404 HTML page for the mobile API:
 
 ```powershell
-curl.exe -i -L --max-time 20 https://flowaux.in/api/v1/geo-discovery/search `
+curl.exe -i -L --max-time 20 https://lotzi.in/api/v1/geo-discovery/search `
   -H "Content-Type: application/json" `
   -d "{\"latitude\":8.713,\"longitude\":77.422,\"serviceTypes\":[\"parking\"],\"radiusKm\":5,\"pageSize\":1,\"schemaVersion\":1}"
 ```
@@ -38,12 +38,12 @@ npm run test -- src/server/mobile-api/core.test.ts
 ## Smoke Tests
 
 ```powershell
-curl.exe -i --max-time 20 https://flowaux.in/api/v1/geo-discovery/search `
+curl.exe -i --max-time 20 https://lotzi.in/api/v1/geo-discovery/search `
   -H "Content-Type: application/json" `
   -H "X-Request-ID: smoke-geo-001" `
   -d "{\"latitude\":8.713,\"longitude\":77.422,\"serviceTypes\":[\"parking\"],\"radiusKm\":5,\"pageSize\":1,\"schemaVersion\":1}"
 
-curl.exe -i --max-time 20 https://flowaux.in/api/v1/bookings/quote `
+curl.exe -i --max-time 20 https://lotzi.in/api/v1/bookings/quote `
   -H "Content-Type: application/json" `
   -H "X-Request-ID: smoke-quote-001" `
   -d "{}"

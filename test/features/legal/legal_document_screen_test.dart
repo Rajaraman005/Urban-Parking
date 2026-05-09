@@ -14,7 +14,7 @@ void main() {
     final paragraph = tester.widget<Text>(
       find
           .text(
-            'This Privacy Policy applies to Urban Parking mobile apps, websites, support channels, booking flows, host listing flows, and related services.',
+            'This Privacy Policy applies to Lotzi mobile apps, websites, support channels, booking flows, host listing flows, and related services.',
           )
           .first,
     );

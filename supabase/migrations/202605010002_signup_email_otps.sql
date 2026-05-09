@@ -37,7 +37,7 @@ revoke all on table public.signup_email_otps from anon;
 revoke all on table public.signup_email_otps from authenticated;
 
 comment on column public.profiles.email_verified_at is
-  'Urban Parking app-level email verification timestamp set by trusted signup OTP flow.';
+  'Lotzi app-level email verification timestamp set by trusted signup OTP flow.';
 
 comment on table public.signup_email_otps is
   'Service-role-only signup OTP records. OTP values are hashed with a server-side pepper before storage.';

@@ -28,7 +28,7 @@ const requiredEnv = (key: string) => {
 const supabaseUrl = requiredEnv("SUPABASE_URL");
 const serviceRoleKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
 const nominatimUserAgent =
-  Deno.env.get("OSM_NOMINATIM_USER_AGENT") ?? "UrbanParking/1.0 (contact: support@urbanparking.app)";
+  Deno.env.get("OSM_NOMINATIM_USER_AGENT") ?? "Lotzi/1.0 (contact: support@lotzi.in)";
 
 const admin = createClient(supabaseUrl, serviceRoleKey, {
   auth: {

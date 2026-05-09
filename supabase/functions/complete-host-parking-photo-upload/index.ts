@@ -28,7 +28,7 @@ const anonKey = requiredEnv("SUPABASE_ANON_KEY");
 const serviceRoleKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
 const cloudinaryCloudName = requiredEnv("CLOUDINARY_CLOUD_NAME");
 const cloudinaryUploadFolder =
-  Deno.env.get("CLOUDINARY_UPLOAD_FOLDER") ?? "urban-parking/listing-photos";
+  Deno.env.get("CLOUDINARY_UPLOAD_FOLDER") ?? "lotzi/listing-photos";
 
 const admin = createClient(supabaseUrl, serviceRoleKey, {
   auth: {

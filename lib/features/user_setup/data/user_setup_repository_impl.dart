@@ -131,7 +131,7 @@ class UserSetupRepositoryImpl implements UserSetupRepository {
     final normalized = intent.trim();
     if (!const {'park', 'host'}.contains(normalized)) {
       throw const ValidationFailure(
-        'Choose how you want to use Urban Parking.',
+        'Choose how you want to use Lotzi.',
         code: 'setup_intent_invalid',
       );
     }
@@ -192,7 +192,7 @@ class UserSetupRepositoryImpl implements UserSetupRepository {
     final intent = _stringFrom(profile, 'intent');
     if (!const {'park', 'host'}.contains(intent)) {
       throw const ValidationFailure(
-        'Choose how you want to use Urban Parking.',
+        'Choose how you want to use Lotzi.',
         code: 'setup_intent_invalid',
       );
     }

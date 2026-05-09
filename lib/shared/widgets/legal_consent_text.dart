@@ -23,7 +23,7 @@ class LegalConsentText extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          'By continuing, you agree to Urban Parking\'s',
+          'By continuing, you agree to Lotzi\'s',
           textAlign: TextAlign.center,
           style: mutedStyle,
         ),

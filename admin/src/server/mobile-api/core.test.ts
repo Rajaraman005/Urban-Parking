@@ -22,15 +22,15 @@ describe("mobile api wrapper", () => {
 
   it("handles CORS preflight without calling the route handler", async () => {
     const response = await testHandler(
-      new Request("https://flowaux.in/api/v1/test", {
-        headers: { Origin: "https://flowaux.in" },
+      new Request("https://lotzi.in/api/v1/test", {
+        headers: { Origin: "https://lotzi.in" },
         method: "OPTIONS",
       }),
     );
 
     expect(response.status).toBe(204);
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
-      "https://flowaux.in",
+      "https://lotzi.in",
     );
     expect(response.headers.get("Access-Control-Expose-Headers")).toContain(
       "X-Request-ID",
@@ -39,7 +39,7 @@ describe("mobile api wrapper", () => {
 
   it("rejects wrong methods with JSON and a request id", async () => {
     const response = await testHandler(
-      new Request("https://flowaux.in/api/v1/test", { method: "GET" }),
+      new Request("https://lotzi.in/api/v1/test", { method: "GET" }),
     );
     const body = (await response.json()) as { error_code: string };
 
@@ -52,7 +52,7 @@ describe("mobile api wrapper", () => {
     vi.stubEnv("MOBILE_API_ENABLED", "false");
 
     const response = await testHandler(
-      new Request("https://flowaux.in/api/v1/test", { method: "POST" }),
+      new Request("https://lotzi.in/api/v1/test", { method: "POST" }),
     );
     const body = (await response.json()) as { error_code: string };
 
@@ -73,13 +73,13 @@ describe("mobile api wrapper", () => {
 
     vi.stubEnv("MOBILE_API_RATE_LIMIT_MODE", "dry-run");
     const dryRun = await testHandler(
-      new Request("https://flowaux.in/api/v1/test", { method: "POST" }),
+      new Request("https://lotzi.in/api/v1/test", { method: "POST" }),
     );
     expect(dryRun.status).toBe(200);
 
     vi.stubEnv("MOBILE_API_RATE_LIMIT_MODE", "enforce");
     const enforced = await testHandler(
-      new Request("https://flowaux.in/api/v1/test", { method: "POST" }),
+      new Request("https://lotzi.in/api/v1/test", { method: "POST" }),
     );
     const body = (await enforced.json()) as { error_code: string };
 

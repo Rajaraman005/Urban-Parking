@@ -1,12 +1,11 @@
 import '../domain/legal_document.dart';
 
 const _contactBlock =
-    'For privacy, grievance, safety, or legal notices, contact Urban Parking at grievance@urbanparking.app or legal@urbanparking.app. We may verify your identity before acting on account, privacy, payout, or listing requests.';
+    'For privacy, grievance, safety, or legal notices, contact Lotzi at grievance@lotzi.in or legal@lotzi.in. We may verify your identity before acting on account, privacy, payout, or listing requests.';
 
 const privacyPolicy = LegalDocument(
   title: 'Privacy Policy',
-  subtitle:
-      'How Urban Parking collects, uses, protects, and shares personal data.',
+  subtitle: 'How Lotzi collects, uses, protects, and shares personal data.',
   effectiveDate: 'Effective 1 May 2026',
   reviewNote:
       'Built for Indian users and aligned to the Digital Personal Data Protection Act, 2023, IT Rules, 2021, and platform marketplace practices. Final launch text should be reviewed by counsel.',
@@ -14,8 +13,8 @@ const privacyPolicy = LegalDocument(
     LegalSection(
       title: '1. Scope',
       body: [
-        'This Privacy Policy applies to Urban Parking mobile apps, websites, support channels, booking flows, host listing flows, and related services.',
-        'Urban Parking acts as a digital marketplace for parking spaces, mobility rentals, and vehicle services. We process personal data to operate, secure, improve, and support the platform.',
+        'This Privacy Policy applies to Lotzi mobile apps, websites, support channels, booking flows, host listing flows, and related services.',
+        'Lotzi acts as a digital marketplace for parking spaces, mobility rentals, and vehicle services. We process personal data to operate, secure, improve, and support the platform.',
       ],
     ),
     LegalSection(
@@ -53,7 +52,7 @@ const privacyPolicy = LegalDocument(
 const termsOfUse = LegalDocument(
   title: 'Terms of Use',
   subtitle:
-      'Rules for using Urban Parking as a guest, host, renter, or service customer.',
+      'Rules for using Lotzi as a guest, host, renter, or service customer.',
   effectiveDate: 'Effective 1 May 2026',
   reviewNote:
       'Designed for an India-first parking marketplace and aligned to consumer, intermediary, payment, and platform safety expectations. Final launch text should be reviewed by counsel.',
@@ -61,14 +60,14 @@ const termsOfUse = LegalDocument(
     LegalSection(
       title: '1. Acceptance',
       body: [
-        'By creating an account, browsing, listing, booking, renting, paying, reviewing, or contacting support through Urban Parking, you agree to these Terms of Use and our Privacy Policy.',
+        'By creating an account, browsing, listing, booking, renting, paying, reviewing, or contacting support through Lotzi, you agree to these Terms of Use and our Privacy Policy.',
       ],
     ),
     LegalSection(
-      title: '2. What Urban Parking provides',
+      title: '2. What Lotzi provides',
       body: [
-        'Urban Parking is a technology marketplace that helps users discover, list, book, and manage parking spaces, mobility rentals, and vehicle-related services.',
-        'Unless expressly stated, Urban Parking does not own, operate, control, inspect, insure, or manage listed parking spaces, vehicles, or third-party services.',
+        'Lotzi is a technology marketplace that helps users discover, list, book, and manage parking spaces, mobility rentals, and vehicle-related services.',
+        'Unless expressly stated, Lotzi does not own, operate, control, inspect, insure, or manage listed parking spaces, vehicles, or third-party services.',
       ],
     ),
     LegalSection(
@@ -82,7 +81,7 @@ const termsOfUse = LegalDocument(
       title: '4. Bookings, payments, and safety',
       body: [
         'Prices, taxes, fees, cancellation terms, payout timing, and refund eligibility are shown in the app before confirmation or in booking details.',
-        'Urban Parking is not a valet, bailee, insurer, garage operator, or security provider unless a specific service says otherwise in writing.',
+        'Lotzi is not a valet, bailee, insurer, garage operator, or security provider unless a specific service says otherwise in writing.',
       ],
     ),
     LegalSection(title: '5. Grievances', body: [_contactBlock]),

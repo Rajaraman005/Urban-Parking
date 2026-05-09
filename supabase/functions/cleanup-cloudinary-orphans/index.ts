@@ -16,7 +16,7 @@ const cloudinaryApiSecret = requiredEnv("CLOUDINARY_API_SECRET");
 const cleanupSecret = requiredEnv("CLOUDINARY_CLEANUP_SECRET");
 
 const isSafePublicId = (value: unknown) =>
-  typeof value === "string" && /^urban-parking\/listing-photos\/[0-9a-f-]+\/[0-9a-f-]+\/[0-9a-f-]+$/i.test(value);
+  typeof value === "string" && /^(?:lotzi|urban-parking)\/listing-photos\/[0-9a-f-]+\/[0-9a-f-]+\/[0-9a-f-]+$/i.test(value);
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {

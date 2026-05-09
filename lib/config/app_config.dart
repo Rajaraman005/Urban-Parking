@@ -1,7 +1,7 @@
 class AppConfig {
   const AppConfig._();
 
-  static const appName = 'Urban Parking';
+  static const appName = 'Lotzi';
   static const appEnv = String.fromEnvironment(
     'APP_ENV',
     defaultValue: String.fromEnvironment(
@@ -13,7 +13,7 @@ class AppConfig {
     'API_BASE_URL',
     defaultValue: String.fromEnvironment(
       'EXPO_PUBLIC_API_BASE_URL',
-      defaultValue: 'https://flowaux.in/api/v1',
+      defaultValue: 'https://lotzi.in/api/v1',
     ),
   );
   static const supabaseUrl = String.fromEnvironment(
@@ -47,7 +47,7 @@ class AppConfig {
     'CLOUDINARY_UPLOAD_FOLDER',
     defaultValue: String.fromEnvironment(
       'EXPO_PUBLIC_CLOUDINARY_UPLOAD_FOLDER',
-      defaultValue: 'urban-parking/listing-photos',
+      defaultValue: 'lotzi/listing-photos',
     ),
   );
 

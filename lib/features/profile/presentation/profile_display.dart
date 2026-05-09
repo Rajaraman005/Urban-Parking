@@ -74,7 +74,7 @@ String _displayName(AuthState? auth, String email) {
     return localPart;
   }
 
-  return 'Urban Parker';
+  return 'Lotzi member';
 }
 
 String _displayEmail(AuthState? auth) {
@@ -88,7 +88,7 @@ String _displayEmail(AuthState? auth) {
     return userEmail;
   }
 
-  return 'guest@urbanparking.app';
+  return 'guest@lotzi.in';
 }
 
 String? _clean(String? value) {

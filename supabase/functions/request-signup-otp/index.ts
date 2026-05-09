@@ -180,9 +180,9 @@ Deno.serve(async (request) => {
       body: JSON.stringify({
         from: resendFromEmail,
         to: [email],
-        subject: "Your Urban Parking verification code",
-        html: `<p>Your Urban Parking verification code is <strong>${code}</strong>.</p><p>This code expires in 5 minutes.</p>`,
-        text: `Your Urban Parking verification code is ${code}. This code expires in 5 minutes.`
+        subject: "Your Lotzi verification code",
+        html: `<p>Your Lotzi verification code is <strong>${code}</strong>.</p><p>This code expires in 5 minutes.</p>`,
+        text: `Your Lotzi verification code is ${code}. This code expires in 5 minutes.`
       })
     });
 

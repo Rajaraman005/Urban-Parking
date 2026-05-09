@@ -68,7 +68,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     return const Scaffold(
       backgroundColor: Color(0xFFF5F6F8),
       body: AppLoader(
-        title: 'Urban Parking',
+        title: 'Lotzi',
         body: 'Preparing your parking experience',
       ),
     );

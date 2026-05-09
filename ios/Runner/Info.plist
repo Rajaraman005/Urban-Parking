@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Urban Parking</string>
+	<string>Lotzi</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Urban Parking</string>
+	<string>Lotzi</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleURLTypes</key>
@@ -38,11 +38,11 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Urban Parking uses your location to show nearby parking, rentals, and services only while you search.</string>
+	<string>Lotzi uses your location to show nearby parking, rentals, and services only while you search.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Urban Parking lets hosts choose listing and profile photos.</string>
+	<string>Lotzi lets hosts choose listing and profile photos.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Urban Parking lets hosts capture listing and profile photos.</string>
+	<string>Lotzi lets hosts capture listing and profile photos.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -43,11 +43,11 @@ Future<void> main() async {
     appLogger.warn('supabase_not_configured', {'appEnv': AppConfig.appEnv});
   }
 
-  runApp(const ProviderScope(child: UrbanParkingApp()));
+  runApp(const ProviderScope(child: LotziApp()));
 }
 
-class UrbanParkingApp extends ConsumerWidget {
-  const UrbanParkingApp({super.key});
+class LotziApp extends ConsumerWidget {
+  const LotziApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -61,7 +61,7 @@ class UrbanParkingApp extends ConsumerWidget {
         home: const Scaffold(
           backgroundColor: Color(0xFFF5F6F8),
           body: AppLoader(
-            title: 'Urban Parking',
+            title: 'Lotzi',
             body: 'Preparing your parking experience',
           ),
         ),

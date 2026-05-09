@@ -1083,7 +1083,7 @@ class _HomeTopBar extends StatelessWidget {
                   children: [
                     Flexible(
                       child: Text(
-                        'Urban Parking',
+                        'Lotzi',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -1096,8 +1096,8 @@ class _HomeTopBar extends StatelessWidget {
                     ),
                     const SizedBox(width: 6),
                     const Icon(
-                      Icons.favorite,
-                      color: Color(0xFFE11D48),
+                      Icons.local_parking_rounded,
+                      color: Color(0xFF0B7A3B),
                       size: 19,
                     ),
                   ],

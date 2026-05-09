@@ -5,7 +5,7 @@
 The mobile app expects this base URL:
 
 ```text
-API_BASE_URL=https://flowaux.in/api/v1
+API_BASE_URL=https://lotzi.in/api/v1
 ```
 
 The Vercel function is:
@@ -31,13 +31,13 @@ For a public mobile API, keep auth and abuse controls on the backend roadmap. Th
 Set this for production builds:
 
 ```text
-API_BASE_URL=https://flowaux.in/api/v1
+API_BASE_URL=https://lotzi.in/api/v1
 ```
 
 With the current domain, the app will call:
 
 ```text
-https://flowaux.in/api/v1/geo-discovery/search
+https://lotzi.in/api/v1/geo-discovery/search
 ```
 
 ## Current Backend Coverage

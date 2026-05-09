@@ -84,7 +84,7 @@ function contextWithBody(body: unknown): MobileApiContext {
   return {
     addSupabaseQueryMs: vi.fn(),
     log: {},
-    request: new Request("https://flowaux.in/api/v1/bookings", {
+    request: new Request("https://lotzi.in/api/v1/bookings", {
       body: JSON.stringify(body),
       headers: { "Content-Type": "application/json" },
       method: "POST",
