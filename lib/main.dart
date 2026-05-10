@@ -12,6 +12,7 @@ import 'features/parking/presentation/owned_parking_live_sync.dart';
 import 'features/profile/presentation/profile_live_sync.dart';
 import 'features/messaging/presentation/messaging_realtime.dart';
 import 'features/notifications/presentation/notification_device_registration.dart';
+import 'features/notifications/presentation/notification_foreground_presenter.dart';
 import 'features/notifications/presentation/notification_realtime.dart';
 import 'core/utils/app_logger.dart';
 import 'core/utils/telemetry.dart';
@@ -87,6 +88,7 @@ class LotziApp extends ConsumerWidget {
     ref.watch(profileLiveSyncProvider);
     ref.watch(messagingInboxLiveSyncProvider);
     ref.watch(notificationDeviceRegistrationProvider);
+    ref.watch(notificationForegroundPresentationProvider);
     ref.watch(notificationLiveSyncProvider);
     ref.watch(locationWarmupProvider);
 

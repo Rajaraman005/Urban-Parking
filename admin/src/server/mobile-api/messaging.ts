@@ -13,6 +13,7 @@ import {
   timedUserSupabase,
   withAbortSignal,
 } from "./supabase";
+import { processNotificationEngineTick } from "@/server/notifications/application/fanout";
 
 type SupabaseErrorLike = {
   code?: string;
@@ -195,10 +196,30 @@ export async function handleSendMessage(
 
   if (result.error) throw messagingSupabaseError(result.error);
   context.log.message_id = stringField(result.data, "id");
+  await processDirectMessageNotifications(context);
   return jsonResponse(result.data, {
     requestId: context.requestId,
     status: 201,
   });
+}
+
+async function processDirectMessageNotifications(context: MobileApiContext) {
+  try {
+    await processNotificationEngineTick({
+      deliveryLimit: 10,
+      fanoutLimit: 5,
+      workerId: `message-api-${context.requestId}`,
+    });
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        error_code: "MESSAGE_NOTIFICATION_PROCESS_FAILED",
+        message: error instanceof Error ? error.message : String(error),
+        request_id: context.requestId,
+        route: "/api/v1/conversations/[id]/messages",
+      }),
+    );
+  }
 }
 
 export async function handleMarkConversationRead(

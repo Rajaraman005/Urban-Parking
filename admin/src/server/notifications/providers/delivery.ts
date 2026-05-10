@@ -110,6 +110,11 @@ export class FcmPushProvider implements NotificationProvider {
     );
     const message = {
       android: {
+        notification: {
+          channelId: "lotzi_high_importance_v1",
+          clickAction: "FLUTTER_NOTIFICATION_CLICK",
+          sound: "default",
+        },
         priority: "high" as const,
       },
       apns: {

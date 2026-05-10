@@ -8,6 +8,7 @@ import '../../../core/realtime/notification_realtime_transport.dart';
 import '../../../core/utils/app_logger.dart';
 import '../../auth/presentation/auth_controller.dart';
 import 'notification_controller.dart';
+import 'notification_foreground_presenter.dart';
 
 final notificationLiveSyncProvider = Provider<void>((ref) {
   final userId = ref.watch(_notificationLiveUserIdProvider);
@@ -44,7 +45,16 @@ final notificationLiveSyncProvider = Provider<void>((ref) {
           column: 'recipient_id',
           value: userId,
         ),
-        callback: (_) => refreshSoon(),
+        callback: (payload) {
+          refreshSoon();
+          if (payload.eventType == sb.PostgresChangeEvent.insert) {
+            unawaited(
+              NotificationForegroundPresenter.instance.showNotificationRecord(
+                payload.newRecord,
+              ),
+            );
+          }
+        },
       )
       .onPostgresChanges(
         event: sb.PostgresChangeEvent.all,
