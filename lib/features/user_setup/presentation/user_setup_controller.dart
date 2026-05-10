@@ -159,6 +159,10 @@ class UserSetupController extends AsyncNotifier<UserSetupState> {
   }
 
   Future<UserSetupState> saveVehicleDetails({
+    bool createNew = false,
+    String? previousVehicleRegistration,
+    bool syncPrimaryProfile = true,
+    String? vehicleId,
     String? vehicleMake,
     String? vehicleModel,
     required String vehicleRegistration,
@@ -166,6 +170,9 @@ class UserSetupController extends AsyncNotifier<UserSetupState> {
   }) async {
     final next = await _setData(
       () => _repo.saveVehicleDetails(
+        createNew: createNew,
+        previousVehicleRegistration: previousVehicleRegistration,
+        vehicleId: vehicleId,
         vehicleMake: vehicleMake,
         vehicleModel: vehicleModel,
         vehicleRegistration: vehicleRegistration,
@@ -175,8 +182,11 @@ class UserSetupController extends AsyncNotifier<UserSetupState> {
     _syncSavedVehicleDetails(
       vehicleMake: vehicleMake,
       vehicleModel: vehicleModel,
+      previousVehicleRegistration: previousVehicleRegistration,
       vehicleRegistration: vehicleRegistration,
       vehicleType: vehicleType,
+      createNew: createNew,
+      syncPrimaryProfile: syncPrimaryProfile,
     );
     return next;
   }
@@ -260,6 +270,9 @@ class UserSetupController extends AsyncNotifier<UserSetupState> {
   }
 
   void _syncSavedVehicleDetails({
+    bool createNew = false,
+    String? previousVehicleRegistration,
+    bool syncPrimaryProfile = true,
     String? vehicleMake,
     String? vehicleModel,
     required String vehicleRegistration,
@@ -269,20 +282,40 @@ class UserSetupController extends AsyncNotifier<UserSetupState> {
     final profile = current?.profile;
     if (current == null || profile == null) return;
 
+    final currentRegistration =
+        _blankToNull(profile.vehicleRegistration) == null
+        ? null
+        : _normalizeVehicleRegistrationForState(profile.vehicleRegistration!);
+    final nextRegistration = _normalizeVehicleRegistrationForState(
+      vehicleRegistration,
+    );
+    final previousRegistration = previousVehicleRegistration == null
+        ? null
+        : _normalizeVehicleRegistrationForState(previousVehicleRegistration);
+    final updatesPrimary =
+        syncPrimaryProfile &&
+        (currentRegistration == null ||
+            (!createNew &&
+                (currentRegistration == nextRegistration ||
+                    currentRegistration == previousRegistration)));
+
     ref
         .read(authControllerProvider.notifier)
         .replaceProfile(
           profile.copyWith(
+            intent: 'park',
             onboardingCompletedAt: DateTime.now().toUtc(),
             setupStep: 'complete',
-            vehicleMake: _blankToNull(vehicleMake),
-            clearVehicleMake: _blankToNull(vehicleMake) == null,
-            vehicleModel: _blankToNull(vehicleModel),
-            clearVehicleModel: _blankToNull(vehicleModel) == null,
-            vehicleRegistration: _normalizeVehicleRegistrationForState(
-              vehicleRegistration,
-            ),
-            vehicleType: vehicleType.trim().toLowerCase(),
+            vehicleMake: updatesPrimary ? _blankToNull(vehicleMake) : null,
+            clearVehicleMake:
+                updatesPrimary && _blankToNull(vehicleMake) == null,
+            vehicleModel: updatesPrimary ? _blankToNull(vehicleModel) : null,
+            clearVehicleModel:
+                updatesPrimary && _blankToNull(vehicleModel) == null,
+            vehicleRegistration: updatesPrimary ? nextRegistration : null,
+            vehicleType: updatesPrimary
+                ? vehicleType.trim().toLowerCase()
+                : null,
             version: profile.version + 1,
           ),
         );

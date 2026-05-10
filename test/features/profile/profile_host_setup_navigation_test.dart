@@ -8,7 +8,10 @@ import 'package:urban_parking/config/app_providers.dart';
 import 'package:urban_parking/features/auth/domain/auth_state.dart';
 import 'package:urban_parking/features/auth/presentation/auth_controller.dart';
 import 'package:urban_parking/features/parking/domain/owner_parking_repository.dart';
+import 'package:urban_parking/features/profile/data/profile_vehicle_repository.dart';
+import 'package:urban_parking/features/profile/domain/profile_vehicle.dart';
 import 'package:urban_parking/features/profile/presentation/profile_screen.dart';
+import 'package:urban_parking/features/profile/presentation/vehicle_details_screen.dart';
 import 'package:urban_parking/core/utils/geo_discovery/geo_types.dart';
 import 'package:urban_parking/core/utils/location_service.dart';
 import 'package:urban_parking/features/user_setup/domain/user_setup_repository.dart';
@@ -502,6 +505,298 @@ void main() {
     expect(find.text('12 Main Road, Chennai'), findsOneWidget);
   });
 
+  testWidgets('parking profile hides hosting and shows vehicle details', (
+    tester,
+  ) async {
+    final router = _router();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authControllerProvider.overrideWith(
+            () => _FakeAuthController(
+              _authenticatedState(
+                intent: 'park',
+                setupStep: 'complete',
+                vehicleMake: 'Honda',
+                vehicleModel: 'Activa',
+                vehicleRegistration: 'TN09AB1234',
+                vehicleType: 'bike',
+              ),
+            ),
+          ),
+          userSetupRepositoryProvider.overrideWithValue(
+            _FakeUserSetupRepository(),
+          ),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Account'), findsOneWidget);
+    expect(find.text('Vehicle details'), findsOneWidget);
+    expect(find.text('Bike - TN 09 AB 1234 - Honda Activa'), findsOneWidget);
+    expect(find.text('Privacy & Booking Controls'), findsNothing);
+    expect(find.text('Hosting'), findsNothing);
+    expect(find.text('Host a parking space'), findsNothing);
+    expect(find.text('My parking spaces'), findsNothing);
+  });
+
+  testWidgets('parking profile vehicle details can be updated', (tester) async {
+    final router = _router();
+    final repository = _FakeUserSetupRepository();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authControllerProvider.overrideWith(
+            () => _FakeAuthController(
+              _authenticatedState(
+                intent: 'park',
+                setupStep: 'complete',
+                vehicleMake: 'Honda',
+                vehicleModel: 'Activa',
+                vehicleRegistration: 'TN09AB1234',
+                vehicleType: 'bike',
+              ),
+            ),
+          ),
+          userSetupRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Vehicle details'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.text('Vehicle details'), findsOneWidget);
+    expect(find.text('TN 09 AB 1234'), findsOneWidget);
+    expect(find.text('Honda Activa'), findsOneWidget);
+    expect(find.byTooltip('Add vehicle'), findsOneWidget);
+    expect(find.text('Save vehicle'), findsNothing);
+
+    await tester.tap(find.text('TN 09 AB 1234'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Vehicle details'), findsOneWidget);
+    expect(find.text('Registration number'), findsOneWidget);
+    expect(find.text('Save vehicle'), findsOneWidget);
+
+    await tester.tap(find.byType(TextFormField).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Save vehicle'), findsOneWidget);
+
+    tester.view.viewInsets = const FakeViewPadding(bottom: 320);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pumpAndSettle();
+    expect(find.text('Save vehicle'), findsOneWidget);
+
+    tester.view.resetViewInsets();
+    await tester.pumpAndSettle();
+    expect(find.text('Save vehicle'), findsOneWidget);
+
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    expect(find.text('Save vehicle'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Add vehicle'));
+    await tester.pumpAndSettle();
+    expect(find.text('Add vehicle'), findsOneWidget);
+    expect(find.text('Registration pending'), findsOneWidget);
+    expect(find.text('Honda Activa'), findsNothing);
+    final blankFields = find.byType(TextFormField);
+    expect(
+      tester.widget<TextFormField>(blankFields.at(0)).controller?.text,
+      '',
+    );
+    expect(
+      tester.widget<TextFormField>(blankFields.at(1)).controller?.text,
+      '',
+    );
+    expect(
+      tester.widget<TextFormField>(blankFields.at(2)).controller?.text,
+      '',
+    );
+
+    await tester.tap(find.text('Car'));
+    final fields = find.byType(TextFormField);
+    await tester.enterText(fields.at(0), 'TN10CD5678');
+    await tester.enterText(fields.at(1), 'Hyundai');
+    await tester.enterText(fields.at(2), 'i20');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Save vehicle'));
+    await tester.tap(find.text('Save vehicle'));
+    await tester.pumpAndSettle();
+
+    expect(repository.savedVehicleType, 'car');
+    expect(repository.savedVehicleCreateNew, isTrue);
+    expect(repository.savedVehicleId, isNull);
+    expect(repository.savedVehicleRegistration, 'TN10CD5678');
+    expect(repository.savedVehicleMake, 'Hyundai');
+    expect(repository.savedVehicleModel, 'i20');
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.text('Vehicle details saved'), findsOneWidget);
+    expect(find.text('Vehicle details'), findsOneWidget);
+    expect(find.text('TN 09 AB 1234'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bike - TN 09 AB 1234 - Honda Activa'), findsOneWidget);
+  });
+
+  testWidgets('parking profile vehicle details shows every saved vehicle', (
+    tester,
+  ) async {
+    final router = _router();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authControllerProvider.overrideWith(
+            () => _FakeAuthController(
+              _authenticatedState(
+                intent: 'park',
+                setupStep: 'complete',
+                vehicleMake: 'Honda',
+                vehicleModel: 'City',
+                vehicleRegistration: 'TN09AB1234',
+                vehicleType: 'car',
+              ),
+            ),
+          ),
+          profileVehiclesProvider.overrideWith(
+            (ref) async => const [
+              ProfileVehicle(
+                id: 'vehicle-car',
+                userId: 'user-1',
+                type: 'car',
+                registration: 'TN09AB1234',
+                make: 'Honda',
+                model: 'City',
+                isPrimary: true,
+              ),
+              ProfileVehicle(
+                id: 'vehicle-bike',
+                userId: 'user-1',
+                type: 'bike',
+                registration: 'TN10CD5678',
+                make: 'Yamaha',
+                model: 'R15',
+              ),
+            ],
+          ),
+          userSetupRepositoryProvider.overrideWithValue(
+            _FakeUserSetupRepository(),
+          ),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('2 vehicles - Car TN 09 AB 1234'), findsOneWidget);
+
+    await tester.tap(find.text('Vehicle details'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('TN 09 AB 1234'), findsOneWidget);
+    expect(find.text('Honda City'), findsOneWidget);
+    expect(find.text('Primary'), findsOneWidget);
+    expect(find.text('TN 10 CD 5678'), findsOneWidget);
+    expect(find.text('Yamaha R15'), findsOneWidget);
+
+    await tester.tap(find.text('Yamaha R15'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Registration number'), findsOneWidget);
+    expect(find.text('TN 10 CD 5678'), findsOneWidget);
+    expect(find.text('Yamaha'), findsOneWidget);
+    expect(find.text('R15'), findsOneWidget);
+  });
+
+  testWidgets('vehicle details long press sets primary and deletes vehicle', (
+    tester,
+  ) async {
+    final router = _router();
+    final vehicleRepository = _FakeProfileVehicleRepository([
+      const ProfileVehicle(
+        id: 'vehicle-car',
+        userId: 'user-1',
+        type: 'car',
+        registration: 'TN09AB1234',
+        make: 'Honda',
+        model: 'City',
+        isPrimary: true,
+      ),
+      const ProfileVehicle(
+        id: 'vehicle-bike',
+        userId: 'user-1',
+        type: 'bike',
+        registration: 'TN10CD5678',
+        make: 'Yamaha',
+        model: 'R15',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authControllerProvider.overrideWith(
+            () => _FakeAuthController(
+              _authenticatedState(
+                intent: 'park',
+                setupStep: 'complete',
+                vehicleMake: 'Honda',
+                vehicleModel: 'City',
+                vehicleRegistration: 'TN09AB1234',
+                vehicleType: 'car',
+              ),
+            ),
+          ),
+          profileVehicleRepositoryProvider.overrideWithValue(vehicleRepository),
+          userSetupRepositoryProvider.overrideWithValue(
+            _FakeUserSetupRepository(),
+          ),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Vehicle details'));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('Yamaha R15'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Set as primary'), findsOneWidget);
+    expect(find.text('Delete vehicle'), findsOneWidget);
+
+    await tester.tap(find.text('Set as primary'));
+    await tester.pumpAndSettle();
+
+    expect(vehicleRepository.primaryVehicleId, 'vehicle-bike');
+    expect(find.text('Primary vehicle updated'), findsOneWidget);
+
+    await tester.longPress(find.text('Honda City'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete vehicle'));
+    await tester.pumpAndSettle();
+
+    expect(vehicleRepository.deletedVehicleIds, contains('vehicle-car'));
+    expect(find.text('Honda City'), findsNothing);
+    expect(find.text('Vehicle deleted'), findsOneWidget);
+  });
+
   testWidgets('profile host tile redirects guests to auth', (tester) async {
     final router = _router();
 
@@ -535,6 +830,25 @@ GoRouter _router() {
     routes: [
       GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
       GoRoute(
+        path: '/profile/vehicle-details',
+        builder: (_, _) => const VehicleDetailsScreen(),
+      ),
+      GoRoute(
+        path: '/profile/vehicle-details/add',
+        builder: (_, _) => const VehicleDetailsFormScreen(
+          key: ValueKey('vehicle-details-add-test'),
+        ),
+      ),
+      GoRoute(
+        path: '/profile/vehicle-details/:vehicleId',
+        builder: (_, state) => VehicleDetailsFormScreen(
+          key: ValueKey(
+            'vehicle-details-${state.pathParameters['vehicleId']}-test',
+          ),
+          vehicleId: state.pathParameters['vehicleId'],
+        ),
+      ),
+      GoRoute(
         path: '/setup/host-basics',
         builder: (_, state) => HostSpaceBasicsScreen(
           createNew: state.uri.queryParameters['new'] == '1',
@@ -557,6 +871,62 @@ GoRouter _router() {
   );
 }
 
+class _FakeProfileVehicleRepository extends ProfileVehicleRepository {
+  _FakeProfileVehicleRepository(List<ProfileVehicle> vehicles)
+    : _vehicles = [...vehicles];
+
+  final List<String> deletedVehicleIds = [];
+  String? primaryVehicleId;
+  List<ProfileVehicle> _vehicles;
+
+  @override
+  Future<List<ProfileVehicle>> loadVehicles({
+    required List<ProfileVehicle> fallback,
+    required String? userId,
+  }) async {
+    return _vehicles;
+  }
+
+  @override
+  Future<ProfileVehicle> setPrimaryVehicle(ProfileVehicle vehicle) async {
+    primaryVehicleId = vehicle.id;
+    _vehicles = [
+      for (final saved in _vehicles)
+        _copyVehicle(saved, isPrimary: saved.id == vehicle.id),
+    ];
+    return _vehicles.firstWhere((saved) => saved.id == vehicle.id);
+  }
+
+  @override
+  Future<ProfileVehicle?> deleteVehicle(ProfileVehicle vehicle) async {
+    final deleted = _vehicles.firstWhere((saved) => saved.id == vehicle.id);
+    deletedVehicleIds.add(vehicle.id);
+    _vehicles = [
+      for (final saved in _vehicles)
+        if (saved.id != vehicle.id) saved,
+    ];
+    if (!deleted.isPrimary || _vehicles.isEmpty) return null;
+    return setPrimaryVehicle(_vehicles.first);
+  }
+
+  ProfileVehicle _copyVehicle(
+    ProfileVehicle vehicle, {
+    required bool isPrimary,
+  }) {
+    return ProfileVehicle(
+      id: vehicle.id,
+      userId: vehicle.userId,
+      type: vehicle.type,
+      registration: vehicle.registration,
+      make: vehicle.make,
+      model: vehicle.model,
+      isPrimary: isPrimary,
+      createdAt: vehicle.createdAt,
+      updatedAt: vehicle.updatedAt,
+    );
+  }
+}
+
 class _FakeAuthController extends AuthController {
   _FakeAuthController(this._initial);
 
@@ -568,8 +938,13 @@ class _FakeAuthController extends AuthController {
 
 AuthState _authenticatedState({
   String? hostParkingDraftId,
+  String? intent,
   String? setupDraftId,
   String setupStep = 'host_basics',
+  String? vehicleMake,
+  String? vehicleModel,
+  String? vehicleRegistration,
+  String? vehicleType,
 }) {
   return AuthState(
     status: AuthStatus.authenticated,
@@ -579,8 +954,13 @@ AuthState _authenticatedState({
       email: 'host@example.com',
       fullName: 'Test Host',
       hostParkingDraftId: hostParkingDraftId,
+      intent: intent,
       setupDraftId: setupDraftId,
       setupStep: setupStep,
+      vehicleMake: vehicleMake,
+      vehicleModel: vehicleModel,
+      vehicleRegistration: vehicleRegistration,
+      vehicleType: vehicleType,
     ),
   );
 }
@@ -609,6 +989,12 @@ class _FakeUserSetupRepository implements UserSetupRepository {
   Future<void>? createNewBarrier;
   Future<void>? resumeLookupBarrier;
   HostBasicsDraftUpdate? savedBasics;
+  bool? savedVehicleCreateNew;
+  String? savedVehicleId;
+  String? savedVehicleMake;
+  String? savedVehicleModel;
+  String? savedVehicleRegistration;
+  String? savedVehicleType;
   final List<String> searchQueries = [];
   bool _hasResumeDraft;
   bool startedCreateNew = false;
@@ -719,11 +1105,20 @@ class _FakeUserSetupRepository implements UserSetupRepository {
 
   @override
   Future<UserSetupState> saveVehicleDetails({
+    bool createNew = false,
+    String? previousVehicleRegistration,
+    String? vehicleId,
     String? vehicleMake,
     String? vehicleModel,
     required String vehicleRegistration,
     required String vehicleType,
   }) async {
+    savedVehicleCreateNew = createNew;
+    savedVehicleId = vehicleId;
+    savedVehicleMake = vehicleMake;
+    savedVehicleModel = vehicleModel;
+    savedVehicleRegistration = vehicleRegistration;
+    savedVehicleType = vehicleType;
     return const UserSetupState(intent: 'park', step: 'complete');
   }
 

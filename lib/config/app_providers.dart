@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -5,6 +7,7 @@ import '../core/network/api_client.dart';
 import '../core/utils/geo_discovery/geo_cache.dart';
 import '../core/utils/geo_discovery/geo_discovery_engine.dart';
 import '../core/utils/geo_discovery/geo_repository.dart';
+import '../core/utils/geo_discovery/geo_types.dart';
 import '../core/utils/geo_discovery/marketplace_data_sources.dart';
 import '../core/utils/location_service.dart';
 import '../features/parking/data/parking_spot_cache.dart';
@@ -36,7 +39,18 @@ final geoDiscoveryEngineProvider = Provider<GeoDiscoveryEngine>((ref) {
 });
 
 final locationServiceProvider = Provider<LocationService>((ref) {
-  return LocationService();
+  final service = LocationService();
+  ref.onDispose(service.dispose);
+  return service;
+});
+
+final locationWarmupProvider = Provider<void>((ref) {
+  final locationService = ref.watch(locationServiceProvider);
+  unawaited(locationService.startWarmup());
+});
+
+final resolvedLocationProvider = StreamProvider<GeoPoint>((ref) {
+  return ref.watch(locationServiceProvider).resolvedLocations;
 });
 
 final parkingSpotCacheProvider = Provider<ParkingSpotCache>((ref) {

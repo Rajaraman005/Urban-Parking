@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../config/app_providers.dart';
 import '../../../core/utils/geo_discovery/geo_types.dart';
+import '../../../core/utils/location_service.dart';
 import '../../../shared/widgets/app_screen.dart';
 import 'geo_discovery_controller.dart';
 import 'geo_list_view.dart';
@@ -12,6 +16,13 @@ class SearchScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen<AsyncValue<GeoPoint>>(resolvedLocationProvider, (_, next) {
+      if (!next.hasValue) return;
+      final current = ref.read(geoDiscoveryControllerProvider).value;
+      if (current?.center != null) return;
+      unawaited(ref.read(geoDiscoveryControllerProvider.notifier).refresh());
+    });
+
     final selected = ref.watch(selectedServiceTypeProvider);
     final discovery = ref.watch(geoDiscoveryControllerProvider);
 
@@ -89,13 +100,12 @@ class SearchScreen extends ConsumerWidget {
                         isLoading: false,
                         items: items,
                         isStale: page?.isStale ?? false,
+                        locationFailureReason: state.locationFailureReason,
                         partialFailures: state.failuresFor(selected),
                         permissionDenied:
                             state.permissionDenied && state.center == null,
                         error: state.message,
-                        onRetry: () => ref
-                            .read(geoDiscoveryControllerProvider.notifier)
-                            .refresh(),
+                        onRetry: () => _handleLocationAction(ref, state),
                       ),
                     ),
                   ],
@@ -117,5 +127,24 @@ class SearchScreen extends ConsumerWidget {
       case ServiceType.service:
         return 'Services';
     }
+  }
+
+  void _handleLocationAction(WidgetRef ref, GeoDiscoveryViewState state) {
+    unawaited(_openSettingsIfNeededAndRefresh(ref, state));
+  }
+
+  Future<void> _openSettingsIfNeededAndRefresh(
+    WidgetRef ref,
+    GeoDiscoveryViewState state,
+  ) async {
+    final locationService = ref.read(locationServiceProvider);
+    if (state.locationFailureReason == LocationFailureReason.servicesDisabled ||
+        state.locationFailureReason == LocationFailureReason.timeout) {
+      await locationService.openLocationSettings();
+    } else if (state.locationFailureReason ==
+        LocationFailureReason.permissionDeniedForever) {
+      await locationService.openAppSettings();
+    }
+    await ref.read(geoDiscoveryControllerProvider.notifier).refresh();
   }
 }

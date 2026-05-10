@@ -21,6 +21,7 @@ class RestMarketplaceDataSource implements MarketplaceDataSource {
     CancelToken? cancelToken,
   }) async {
     try {
+      _apiClient.refreshRuntimeOptions();
       final response = await _apiClient.dio.post<Map<String, Object?>>(
         GeoDiscoveryConfig.endpoint,
         data: query.toRequestJson(),

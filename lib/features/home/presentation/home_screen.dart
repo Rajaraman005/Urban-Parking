@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/widgets/app_screen.dart';
+import '../../messaging/presentation/messaging_controller.dart';
 import '../data/home_discovery_actions.dart';
 import 'home_nearby_filtering.dart';
 import 'home_nearby_section.dart';
@@ -1059,11 +1061,21 @@ class _QuickFilterOption {
   final HomeNearbyQuickFilter value;
 }
 
-class _HomeTopBar extends StatelessWidget {
+class _HomeTopBar extends ConsumerWidget {
   const _HomeTopBar();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unreadCount = ref
+        .watch(conversationsProvider)
+        .maybeWhen(
+          data: (conversations) => conversations.fold<int>(
+            0,
+            (total, conversation) => total + conversation.unreadCount,
+          ),
+          orElse: () => 0,
+        );
+
     return DecoratedBox(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1096,21 +1108,16 @@ class _HomeTopBar extends StatelessWidget {
                     ),
                     const SizedBox(width: 6),
                     const Icon(
-                      Icons.local_parking_rounded,
-                      color: Color(0xFF0B7A3B),
+                      Icons.favorite,
+                      color: Color(0xFFE11D48),
                       size: 19,
                     ),
                   ],
                 ),
               ),
-              IconButton(
-                tooltip: 'Notifications',
-                onPressed: () {},
-                icon: const Icon(
-                  Icons.notifications_none_rounded,
-                  color: Color(0xFF0B0B0C),
-                  size: 24,
-                ),
+              _TopBarMessageButton(
+                unreadCount: unreadCount,
+                onTap: () => context.push('/messages'),
               ),
             ],
           ),
@@ -1118,4 +1125,140 @@ class _HomeTopBar extends StatelessWidget {
       ),
     );
   }
+}
+
+class _TopBarMessageButton extends StatelessWidget {
+  const _TopBarMessageButton({required this.onTap, required this.unreadCount});
+
+  final VoidCallback onTap;
+  final int unreadCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasUnread = unreadCount > 0;
+    return Tooltip(
+      message: 'Messages',
+      child: Semantics(
+        button: true,
+        label: hasUnread ? '$unreadCount unread messages' : 'Messages',
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            highlightColor: Colors.black.withValues(alpha: 0.05),
+            splashColor: Colors.black.withValues(alpha: 0.07),
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Center(
+                    child: SizedBox(
+                      width: 29,
+                      height: 29,
+                      child: CustomPaint(painter: _ChatBubbleIconPainter()),
+                    ),
+                  ),
+                  if (hasUnread)
+                    Positioned(
+                      right: 7,
+                      top: 7,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE11D48),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        child: const SizedBox(width: 11, height: 11),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatBubbleIconPainter extends CustomPainter {
+  const _ChatBubbleIconPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stroke = Paint()
+      ..isAntiAlias = true
+      ..color = const Color(0xFF0B0B0C)
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..strokeWidth = size.width * 0.078;
+
+    final backBubble = Path()
+      ..moveTo(size.width * 0.36, size.height * 0.16)
+      ..lineTo(size.width * 0.74, size.height * 0.16)
+      ..quadraticBezierTo(
+        size.width * 0.91,
+        size.height * 0.16,
+        size.width * 0.91,
+        size.height * 0.33,
+      )
+      ..lineTo(size.width * 0.91, size.height * 0.58);
+
+    final frontBubble = Path()
+      ..moveTo(size.width * 0.15, size.height * 0.77)
+      ..lineTo(size.width * 0.15, size.height * 0.48)
+      ..quadraticBezierTo(
+        size.width * 0.15,
+        size.height * 0.34,
+        size.width * 0.29,
+        size.height * 0.34,
+      )
+      ..lineTo(size.width * 0.70, size.height * 0.34)
+      ..quadraticBezierTo(
+        size.width * 0.84,
+        size.height * 0.34,
+        size.width * 0.84,
+        size.height * 0.48,
+      )
+      ..lineTo(size.width * 0.84, size.height * 0.67)
+      ..quadraticBezierTo(
+        size.width * 0.84,
+        size.height * 0.81,
+        size.width * 0.70,
+        size.height * 0.81,
+      )
+      ..lineTo(size.width * 0.36, size.height * 0.81)
+      ..lineTo(size.width * 0.18, size.height * 0.92)
+      ..quadraticBezierTo(
+        size.width * 0.15,
+        size.height * 0.94,
+        size.width * 0.15,
+        size.height * 0.89,
+      )
+      ..lineTo(size.width * 0.15, size.height * 0.77);
+
+    canvas.drawPath(backBubble, stroke);
+    canvas.drawPath(frontBubble, stroke);
+
+    final dotPaint = Paint()
+      ..isAntiAlias = true
+      ..color = const Color(0xFF0B0B0C)
+      ..style = PaintingStyle.fill;
+    final dotRadius = size.width * 0.041;
+    for (final x in const [0.41, 0.52, 0.63]) {
+      canvas.drawCircle(
+        Offset(size.width * x, size.height * 0.59),
+        dotRadius,
+        dotPaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

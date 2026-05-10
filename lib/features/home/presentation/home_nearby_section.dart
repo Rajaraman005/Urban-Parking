@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../config/app_providers.dart';
 import '../../../core/utils/geo_discovery/geo_types.dart';
+import '../../../core/utils/location_service.dart';
 import '../../../shared/formatters.dart';
 import '../../../shared/widgets/product_card.dart';
 import '../../parking/domain/parking_spot.dart';
@@ -44,6 +48,13 @@ class HomeNearbySection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen<AsyncValue<GeoPoint>>(resolvedLocationProvider, (_, next) {
+      if (!next.hasValue) return;
+      final current = ref.read(homeNearbyControllerProvider).value;
+      if (current?.center != null) return;
+      unawaited(ref.read(homeNearbyControllerProvider.notifier).refresh());
+    });
+
     final nearby = ref.watch(homeNearbyControllerProvider);
 
     return Padding(
@@ -52,6 +63,7 @@ class HomeNearbySection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _HomeNearbyHeader(
+            subtitle: _subtitleFor(nearby),
             vehicleFilter: vehicleFilter,
             onRefresh: () =>
                 ref.read(homeNearbyControllerProvider.notifier).refresh(),
@@ -68,16 +80,15 @@ class HomeNearbySection extends ConsumerWidget {
                   ref.read(homeNearbyControllerProvider.notifier).refresh(),
             ),
             data: (state) {
-              if (state.permissionDenied && state.center == null) {
+              if (state.center == null) {
                 return _HomeNearbyMessageCard(
-                  icon: Icons.location_off_rounded,
-                  title: 'Location permission needed',
+                  icon: _locationIconFor(state),
+                  title: _locationTitleFor(state),
                   message:
                       state.message ??
-                      'Allow location access to show spaces near you.',
-                  actionLabel: 'Try again',
-                  onAction: () =>
-                      ref.read(homeNearbyControllerProvider.notifier).refresh(),
+                      'Enable location access to show spaces near you.',
+                  actionLabel: _locationActionLabelFor(state),
+                  onAction: () => _handleLocationAction(ref, state),
                 );
               }
 
@@ -107,15 +118,78 @@ class HomeNearbySection extends ConsumerWidget {
       ),
     );
   }
+
+  String _subtitleFor(AsyncValue<HomeNearbyViewState> nearby) {
+    final state = nearby.value;
+    if (nearby.isLoading && state == null) return 'Finding your location';
+    if (state?.center == null) return 'Enable location to see nearby spaces';
+    return vehicleFilter?.nearbySubtitle ?? 'Live spaces from your location';
+  }
+
+  IconData _locationIconFor(HomeNearbyViewState state) {
+    return switch (state.locationFailureReason) {
+      LocationFailureReason.servicesDisabled => Icons.location_disabled_rounded,
+      LocationFailureReason.permissionDenied ||
+      LocationFailureReason.permissionDeniedForever =>
+        Icons.location_off_rounded,
+      LocationFailureReason.timeout => Icons.location_searching_rounded,
+      LocationFailureReason.unavailable ||
+      LocationFailureReason.none => Icons.my_location_rounded,
+    };
+  }
+
+  String _locationTitleFor(HomeNearbyViewState state) {
+    return switch (state.locationFailureReason) {
+      LocationFailureReason.servicesDisabled => 'Turn on device location',
+      LocationFailureReason.permissionDenied ||
+      LocationFailureReason.permissionDeniedForever =>
+        'Location permission needed',
+      LocationFailureReason.timeout => 'Location is taking longer than usual',
+      LocationFailureReason.unavailable ||
+      LocationFailureReason.none => 'Enable location to start',
+    };
+  }
+
+  String _locationActionLabelFor(HomeNearbyViewState state) {
+    return switch (state.locationFailureReason) {
+      LocationFailureReason.servicesDisabled => 'Open location settings',
+      LocationFailureReason.permissionDeniedForever => 'Open app settings',
+      LocationFailureReason.permissionDenied => 'Allow location',
+      LocationFailureReason.timeout => 'Open location settings',
+      LocationFailureReason.unavailable ||
+      LocationFailureReason.none => 'Try again',
+    };
+  }
+
+  void _handleLocationAction(WidgetRef ref, HomeNearbyViewState state) {
+    unawaited(_openSettingsIfNeededAndRefresh(ref, state));
+  }
+
+  Future<void> _openSettingsIfNeededAndRefresh(
+    WidgetRef ref,
+    HomeNearbyViewState state,
+  ) async {
+    final locationService = ref.read(locationServiceProvider);
+    if (state.locationFailureReason == LocationFailureReason.servicesDisabled ||
+        state.locationFailureReason == LocationFailureReason.timeout) {
+      await locationService.openLocationSettings();
+    } else if (state.locationFailureReason ==
+        LocationFailureReason.permissionDeniedForever) {
+      await locationService.openAppSettings();
+    }
+    await ref.read(homeNearbyControllerProvider.notifier).refresh();
+  }
 }
 
 class _HomeNearbyHeader extends StatelessWidget {
   const _HomeNearbyHeader({
     required this.onRefresh,
+    required this.subtitle,
     required this.vehicleFilter,
   });
 
   final VoidCallback onRefresh;
+  final String subtitle;
   final HomeNearbyVehicleFilter? vehicleFilter;
 
   @override
@@ -140,8 +214,7 @@ class _HomeNearbyHeader extends StatelessWidget {
               ),
               SizedBox(height: 5),
               Text(
-                vehicleFilter?.nearbySubtitle ??
-                    'Live spaces from your location',
+                subtitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -581,6 +654,9 @@ class _HomeNearbyMessageCard extends StatelessWidget {
     }
     if (normalized.contains('retry') || normalized.contains('refresh')) {
       return Icons.refresh_rounded;
+    }
+    if (normalized.contains('settings')) {
+      return Icons.settings_rounded;
     }
     if (normalized.contains('try')) {
       return Icons.location_searching_rounded;

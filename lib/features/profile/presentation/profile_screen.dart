@@ -5,12 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/validation/indian_vehicle_registration.dart';
 import '../../../shared/widgets/app_screen.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../parking/presentation/owner_parking_controller.dart';
 import '../../user_setup/presentation/host_setup_launcher.dart';
 import '../../user_setup/presentation/host_setup_launch_controller.dart';
+import '../data/profile_vehicle_repository.dart';
+import '../domain/profile_vehicle.dart';
 import 'profile_display.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -20,6 +23,11 @@ class ProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authValue = ref.watch(authControllerProvider);
     final profileDisplay = ref.watch(currentProfileDisplayProvider);
+    final profile = profileDisplay.profile ?? authValue.value?.profile;
+    final vehiclesValue = ref.watch(profileVehiclesProvider);
+    final vehicles = vehiclesValue.value ?? profileVehiclesFromProfile(profile);
+    final primaryVehicle = _primaryVehicle(vehicles);
+    final isParkingUser = _isParkingIntent(profile?.intent);
 
     return AppScreen(
       padded: false,
@@ -47,62 +55,87 @@ class ProfileScreen extends ConsumerWidget {
                   subtitle: 'Name, email, and profile photo',
                   onTap: () => context.push('/profile/personal-details'),
                 ),
-                _ProfileActionTile(
-                  icon: Icons.privacy_tip_outlined,
-                  title: 'Privacy & Booking Controls',
-                  subtitle: 'Phone visibility and booking approvals',
-                  onTap: () =>
-                      context.push('/profile/privacy-booking-controls'),
-                ),
+                if (!isParkingUser)
+                  _ProfileActionTile(
+                    icon: Icons.privacy_tip_outlined,
+                    title: 'Privacy & Booking',
+                    subtitle: 'Phone visibility and booking approvals',
+                    onTap: () =>
+                        context.push('/profile/privacy-booking-controls'),
+                  ),
                 _ProfileActionTile(
                   icon: Icons.bookmark_border_rounded,
                   title: 'Parking activity',
                   subtitle: 'Bookings, saved places, and recent searches',
                   onTap: () => context.go('/search'),
                 ),
+                if (isParkingUser)
+                  _ProfileActionTile(
+                    icon: _vehicleIcon(
+                      primaryVehicle?.type ?? profile?.vehicleType,
+                    ),
+                    title: 'Vehicle details',
+                    subtitle: _vehicleSummary(profile, vehicles),
+                    onTap: () => context.push('/profile/vehicle-details'),
+                  ),
               ],
             ),
           ),
+          if (!isParkingUser)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+              child: _ProfileSection(
+                title: 'Hosting',
+                children: [
+                  _ProfileActionTile(
+                    icon: Icons.add_home_work_outlined,
+                    title: 'Host a parking space',
+                    subtitle: 'Create or continue a parking listing',
+                    onTapDown: (_) {
+                      final authState = ref.read(authControllerProvider).value;
+                      if (!_shouldPrewarmHostSetup(authState)) return;
+                      unawaited(
+                        ref
+                            .read(hostSetupLaunchControllerProvider.notifier)
+                            .prewarmResumeCandidate(authState),
+                      );
+                    },
+                    onTap: () => unawaited(startHostSetup(context, ref)),
+                  ),
+                  _ProfileActionTile(
+                    icon: Icons.garage_outlined,
+                    title: 'My parking spaces',
+                    subtitle: 'Edit live price, address, and availability',
+                    onTap: () {
+                      ref.invalidate(ownedParkingSpacesProvider);
+                      context.push('/profile/my-spaces');
+                    },
+                  ),
+                  _ProfileActionTile(
+                    icon: Icons.fact_check_outlined,
+                    title: 'Booking requests',
+                    subtitle: 'Approve, reject, or review host requests',
+                    onTap: () => context.push('/profile/booking-requests'),
+                  ),
+                  _ProfileActionTile(
+                    icon: Icons.payments_outlined,
+                    title: 'Payouts',
+                    subtitle: 'Bank details and earning preferences',
+                    onTap: () => context.push('/setup/host-pricing'),
+                  ),
+                ],
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
             child: _ProfileSection(
-              title: 'Hosting',
+              title: 'Communication',
               children: [
                 _ProfileActionTile(
-                  icon: Icons.add_home_work_outlined,
-                  title: 'Host a parking space',
-                  subtitle: 'Create or continue a parking listing',
-                  onTapDown: (_) {
-                    final authState = ref.read(authControllerProvider).value;
-                    if (!_shouldPrewarmHostSetup(authState)) return;
-                    unawaited(
-                      ref
-                          .read(hostSetupLaunchControllerProvider.notifier)
-                          .prewarmResumeCandidate(authState),
-                    );
-                  },
-                  onTap: () => unawaited(startHostSetup(context, ref)),
-                ),
-                _ProfileActionTile(
-                  icon: Icons.garage_outlined,
-                  title: 'My parking spaces',
-                  subtitle: 'Edit live price, address, and availability',
-                  onTap: () {
-                    ref.invalidate(ownedParkingSpacesProvider);
-                    context.push('/profile/my-spaces');
-                  },
-                ),
-                _ProfileActionTile(
-                  icon: Icons.fact_check_outlined,
-                  title: 'Booking requests',
-                  subtitle: 'Approve, reject, or review host requests',
-                  onTap: () => context.push('/profile/booking-requests'),
-                ),
-                _ProfileActionTile(
-                  icon: Icons.payments_outlined,
-                  title: 'Payouts',
-                  subtitle: 'Bank details and earning preferences',
-                  onTap: () => context.push('/setup/host-pricing'),
+                  icon: Icons.chat_bubble_outline_rounded,
+                  title: 'Messages',
+                  subtitle: 'Host chats and property conversations',
+                  onTap: () => context.push('/messages'),
                 ),
               ],
             ),
@@ -133,7 +166,7 @@ class ProfileScreen extends ConsumerWidget {
               isSignedIn: profileDisplay.isSignedIn,
               onPressed: () {
                 if (profileDisplay.isSignedIn) {
-                  unawaited(_signOut(context, ref));
+                  _signOut(context, ref);
                 } else {
                   context.go('/auth');
                 }
@@ -145,11 +178,9 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _signOut(BuildContext context, WidgetRef ref) async {
-    await ref.read(authControllerProvider.notifier).signOut();
-    if (context.mounted) {
-      context.go('/auth');
-    }
+  void _signOut(BuildContext context, WidgetRef ref) {
+    unawaited(ref.read(authControllerProvider.notifier).signOut());
+    context.go('/auth');
   }
 }
 
@@ -210,10 +241,81 @@ class _HostSetupPrewarmEffectState
 bool _shouldPrewarmHostSetup(AuthState? authState) {
   if (authState?.isAuthenticated != true) return false;
   final profile = authState?.profile;
+  if (_isParkingIntent(profile?.intent)) return false;
   final hostDraftId = profile?.hostParkingDraftId?.trim();
   final legacyDraftId = profile?.setupDraftId?.trim();
   return (hostDraftId != null && hostDraftId.isNotEmpty) ||
       (legacyDraftId != null && legacyDraftId.isNotEmpty);
+}
+
+bool _isParkingIntent(String? intent) => intent?.trim().toLowerCase() == 'park';
+
+IconData _vehicleIcon(String? type) {
+  return switch (type?.trim().toLowerCase()) {
+    'bike' => Icons.two_wheeler_rounded,
+    'car' => Icons.directions_car_filled_rounded,
+    _ => Icons.directions_car_outlined,
+  };
+}
+
+String _vehicleSummary(UserProfile? profile, List<ProfileVehicle> vehicles) {
+  if (vehicles.length > 1) {
+    final primary = _primaryVehicle(vehicles);
+    final primaryLabel = primary == null
+        ? ''
+        : ' - ${_vehicleTypeLabel(primary.type)} ${primary.displayRegistration}';
+    return '${vehicles.length} vehicles$primaryLabel';
+  }
+  if (vehicles.length == 1) {
+    final vehicle = vehicles.first;
+    final makeModel = _makeModelLabel(vehicle.make, vehicle.model);
+    final parts = [
+      if (vehicle.displayRegistration.isNotEmpty) vehicle.displayRegistration,
+      if (makeModel.isNotEmpty) makeModel,
+    ];
+    if (parts.isEmpty) {
+      return '${_vehicleTypeLabel(vehicle.type)} details missing';
+    }
+    return '${_vehicleTypeLabel(vehicle.type)} - ${parts.join(' - ')}';
+  }
+  if (profile == null) return 'Add your vehicle for faster bookings';
+
+  final type = _vehicleTypeLabel(profile.vehicleType);
+  final registration = IndianVehicleRegistration.formatForDisplay(
+    profile.vehicleRegistration ?? '',
+  );
+  final makeModel = _makeModelLabel(profile.vehicleMake, profile.vehicleModel);
+  final parts = [
+    if (registration.isNotEmpty) registration,
+    if (makeModel.isNotEmpty) makeModel,
+  ];
+
+  if (parts.isEmpty) return '$type details missing';
+  return '$type - ${parts.join(' - ')}';
+}
+
+ProfileVehicle? _primaryVehicle(List<ProfileVehicle> vehicles) {
+  for (final vehicle in vehicles) {
+    if (vehicle.isPrimary) return vehicle;
+  }
+  return vehicles.isEmpty ? null : vehicles.first;
+}
+
+String _vehicleTypeLabel(String? type) {
+  return switch (type?.trim().toLowerCase()) {
+    'bike' => 'Bike',
+    'car' => 'Car',
+    String value when value.isNotEmpty => type!.trim(),
+    _ => 'Vehicle',
+  };
+}
+
+String _makeModelLabel(String? make, String? model) {
+  final parts = [
+    if (make != null && make.trim().isNotEmpty) make.trim(),
+    if (model != null && model.trim().isNotEmpty) model.trim(),
+  ];
+  return parts.join(' ');
 }
 
 class _ProfileHero extends StatelessWidget {

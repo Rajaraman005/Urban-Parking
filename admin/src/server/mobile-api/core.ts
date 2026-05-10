@@ -19,9 +19,11 @@ type LogFields = {
   actor_id_hash?: string;
   booking_id?: string;
   booking_status?: string;
+  conversation_id?: string;
   error_code?: string;
   geo_fingerprint_hash?: string;
   listing_id?: string;
+  message_id?: string;
   rate_limit_mode?: string;
   rate_limited?: boolean;
   supabase_query_ms?: number;
@@ -372,10 +374,12 @@ function emitStructuredLog({
     actor_id_hash: log.actor_id_hash,
     booking_id: log.booking_id,
     booking_status: log.booking_status,
+    conversation_id: log.conversation_id,
     duration_ms: durationMs,
     error_code: log.error_code,
     geo_fingerprint_hash: log.geo_fingerprint_hash,
     listing_id: log.listing_id,
+    message_id: log.message_id,
     rate_limit_mode: log.rate_limit_mode,
     rate_limited: log.rate_limited ?? false,
     request_id: requestId,

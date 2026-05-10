@@ -18,4 +18,16 @@ void main() {
       expect(sql, contains('grant update'));
     },
   );
+
+  test('profile vehicles migration adds multi-vehicle storage', () {
+    final sql = File(
+      'supabase/migrations/202605090001_profile_vehicles.sql',
+    ).readAsStringSync();
+
+    expect(sql, contains('create table if not exists public.profile_vehicles'));
+    expect(sql, contains('unique (user_id, vehicle_registration)'));
+    expect(sql, contains('profile_vehicles_one_primary_idx'));
+    expect(sql, contains('profile_vehicles_select_own'));
+    expect(sql, contains('insert into public.profile_vehicles'));
+  });
 }

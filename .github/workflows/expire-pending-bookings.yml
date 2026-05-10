@@ -14,13 +14,15 @@ jobs:
       - name: Call secured expiry endpoint
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          DEFAULT_EXPIRY_JOB_URL: https://lotzi.in/api/internal/jobs/expire-pending-bookings
           EXPIRY_JOB_URL: ${{ secrets.BOOKING_EXPIRY_JOB_URL }}
           REQUEST_ID: github-actions-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
+          EXPIRY_JOB_URL="${EXPIRY_JOB_URL:-$DEFAULT_EXPIRY_JOB_URL}"
 
           if [ -z "${EXPIRY_JOB_URL}" ]; then
-            echo "BOOKING_EXPIRY_JOB_URL secret is required." >&2
+            echo "Expiry job URL is required." >&2
             exit 1
           fi
 

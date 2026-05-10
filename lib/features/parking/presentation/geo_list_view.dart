@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/utils/geo_discovery/geo_types.dart';
+import '../../../core/utils/location_service.dart';
 import '../../../shared/formatters.dart';
 import '../../../shared/widgets/product_card.dart';
 import '../../../shared/widgets/state_view.dart';
@@ -17,6 +18,7 @@ class GeoListView extends ConsumerWidget {
     super.key,
     this.error,
     this.isStale = false,
+    this.locationFailureReason = LocationFailureReason.none,
     this.partialFailures = const [],
     this.permissionDenied = false,
   });
@@ -26,11 +28,21 @@ class GeoListView extends ConsumerWidget {
   final VoidCallback onRetry;
   final String? error;
   final bool isStale;
+  final LocationFailureReason locationFailureReason;
   final List<GeoDiscoveryPartialFailure> partialFailures;
   final bool permissionDenied;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (locationFailureReason != LocationFailureReason.none && items.isEmpty) {
+      return StateView(
+        title: _locationTitleFor(locationFailureReason),
+        body: error ?? 'Enable location access to discover resources near you.',
+        actionLabel: _locationActionLabelFor(locationFailureReason),
+        onAction: onRetry,
+      );
+    }
+
     if (permissionDenied) {
       return StateView(
         title: 'Location permission needed',
@@ -249,6 +261,29 @@ class GeoListView extends ConsumerWidget {
       ),
       const ProductCardStat(icon: Icons.sync_rounded, label: 'Live'),
     ];
+  }
+
+  String _locationTitleFor(LocationFailureReason reason) {
+    return switch (reason) {
+      LocationFailureReason.servicesDisabled => 'Turn on device location',
+      LocationFailureReason.permissionDenied ||
+      LocationFailureReason.permissionDeniedForever =>
+        'Location permission needed',
+      LocationFailureReason.timeout => 'Location is taking longer than usual',
+      LocationFailureReason.unavailable ||
+      LocationFailureReason.none => 'Enable location to start',
+    };
+  }
+
+  String _locationActionLabelFor(LocationFailureReason reason) {
+    return switch (reason) {
+      LocationFailureReason.servicesDisabled => 'Open location settings',
+      LocationFailureReason.permissionDeniedForever => 'Open app settings',
+      LocationFailureReason.permissionDenied => 'Allow location',
+      LocationFailureReason.timeout => 'Open location settings',
+      LocationFailureReason.unavailable ||
+      LocationFailureReason.none => 'Try again',
+    };
   }
 }
 

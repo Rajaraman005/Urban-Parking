@@ -33,9 +33,17 @@ Use one of these production schedulers:
 For GitHub Actions, configure repository secrets:
 
 ```text
-BOOKING_EXPIRY_JOB_URL=https://your-domain.example/api/internal/jobs/expire-pending-bookings
 CRON_SECRET=<same value configured in Vercel>
 ```
+
+The workflow defaults to the current production endpoint:
+
+```text
+https://lotzi.in/api/internal/jobs/expire-pending-bookings
+```
+
+If the admin deployment moves to another domain, add or update the optional
+`BOOKING_EXPIRY_JOB_URL` repository secret with the new full endpoint URL.
 
 ## Operations
 

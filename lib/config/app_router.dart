@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -9,12 +10,15 @@ import '../features/booking/presentation/host_booking_requests_screen.dart';
 import '../features/home/presentation/home_screen.dart';
 import '../features/legal/data/legal_documents.dart';
 import '../features/legal/presentation/legal_document_screen.dart';
+import '../features/messaging/presentation/conversation_list_screen.dart';
+import '../features/messaging/presentation/conversation_thread_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/parking/presentation/search_screen.dart';
 import '../features/parking/presentation/owned_parking_screen.dart';
 import '../features/profile/presentation/personal_details_screen.dart';
 import '../features/profile/presentation/privacy_booking_controls_screen.dart';
 import '../features/profile/presentation/profile_screen.dart';
+import '../features/profile/presentation/vehicle_details_screen.dart';
 import '../features/rental/presentation/rental_screen.dart';
 import '../features/services/presentation/services_screen.dart';
 import '../features/splash/presentation/splash_screen.dart';
@@ -77,6 +81,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ShellRoute(
         builder: (context, state, child) => TabShell(
           currentIndex: _tabIndexForLocation(state.uri.path),
+          resizeToAvoidBottomInset: !_usesFixedVehicleKeyboardLayout(
+            state.uri.path,
+          ),
           child: child,
         ),
         routes: [
@@ -103,6 +110,25 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/profile/personal-details',
             builder: (context, state) => const PersonalDetailsScreen(),
+          ),
+          GoRoute(
+            path: '/profile/vehicle-details',
+            builder: (context, state) => const VehicleDetailsScreen(),
+          ),
+          GoRoute(
+            path: '/profile/vehicle-details/add',
+            builder: (context, state) => const VehicleDetailsFormScreen(
+              key: ValueKey('vehicle-details-add'),
+            ),
+          ),
+          GoRoute(
+            path: '/profile/vehicle-details/:vehicleId',
+            builder: (context, state) => VehicleDetailsFormScreen(
+              key: ValueKey(
+                'vehicle-details-${state.pathParameters['vehicleId']}',
+              ),
+              vehicleId: state.pathParameters['vehicleId'],
+            ),
           ),
           GoRoute(
             path: '/profile/privacy-booking-controls',
@@ -146,6 +172,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             BookingScheduleScreen(spotId: state.pathParameters['spotId']!),
       ),
       GoRoute(
+        path: '/messages',
+        builder: (context, state) => const ConversationListScreen(),
+      ),
+      GoRoute(
+        path: '/messages/:conversationId',
+        builder: (context, state) => ConversationThreadScreen(
+          conversationId: state.pathParameters['conversationId']!,
+        ),
+      ),
+      GoRoute(
         path: '/privacy',
         builder: (context, state) =>
             const LegalDocumentScreen(document: privacyPolicy),
@@ -165,4 +201,8 @@ int _tabIndexForLocation(String location) {
   if (location.startsWith('/services')) return 3;
   if (location.startsWith('/profile')) return 4;
   return 0;
+}
+
+bool _usesFixedVehicleKeyboardLayout(String location) {
+  return location.startsWith('/profile/vehicle-details');
 }

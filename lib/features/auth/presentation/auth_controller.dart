@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../config/app_providers.dart';
+import '../../../core/utils/app_logger.dart';
 import '../data/supabase_auth_repository.dart';
 import '../domain/auth_repository.dart';
 import '../domain/auth_state.dart';
@@ -50,10 +53,29 @@ class AuthController extends AsyncNotifier<AuthState> {
     state = await AsyncValue.guard(_repository.signInWithGoogle);
   }
 
-  Future<void> signOut() async {
-    await _repository.signOut();
-    await ref.read(geoDiscoveryCacheProvider).clear();
+  Future<void> signOut() {
+    final repository = _repository;
+    final clearGeoCache = ref.read(geoDiscoveryCacheProvider).clear;
+
     state = const AsyncData(AuthState(status: AuthStatus.unauthenticated));
+    unawaited(_finishSignOutCleanup(repository, clearGeoCache));
+    return Future<void>.value();
+  }
+
+  Future<void> _finishSignOutCleanup(
+    AuthRepository repository,
+    Future<void> Function() clearGeoCache,
+  ) async {
+    try {
+      await Future.wait<void>([
+        repository.signOut(),
+        clearGeoCache(),
+      ], eagerError: false);
+    } catch (error) {
+      appLogger.warn('sign_out_cleanup_failed', {
+        'errorType': error.runtimeType.toString(),
+      });
+    }
   }
 
   Future<AuthState> refreshSessionOrLogout() async {

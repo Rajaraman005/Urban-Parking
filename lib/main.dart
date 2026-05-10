@@ -4,10 +4,12 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config/app_config.dart';
+import 'config/app_providers.dart';
 import 'config/app_router.dart';
 import 'config/preview_flags.dart';
 import 'features/parking/presentation/owned_parking_live_sync.dart';
 import 'features/profile/presentation/profile_live_sync.dart';
+import 'features/messaging/presentation/messaging_realtime.dart';
 import 'core/utils/app_logger.dart';
 import 'core/utils/telemetry.dart';
 import 'shared/widgets/app_loader.dart';
@@ -71,6 +73,8 @@ class LotziApp extends ConsumerWidget {
     final router = ref.watch(appRouterProvider);
     ref.watch(ownedParkingLiveSyncProvider);
     ref.watch(profileLiveSyncProvider);
+    ref.watch(messagingInboxLiveSyncProvider);
+    ref.watch(locationWarmupProvider);
 
     return MaterialApp.router(
       title: AppConfig.appName,

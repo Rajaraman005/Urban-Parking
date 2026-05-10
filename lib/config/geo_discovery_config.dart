@@ -25,7 +25,10 @@ class GeoDiscoveryConfig {
   ];
   static const retryMaxAttempts = 3;
   static const retryMaxDelay = Duration(seconds: 16);
-  static const gpsTimeout = Duration(seconds: 5);
+  static const gpsQuickTimeout = Duration(seconds: 4);
+  static const gpsTimeout = Duration(seconds: 12);
+  static const gpsProviderFallbackTimeout = Duration(seconds: 12);
+  static const gpsWarmupTimeout = Duration(seconds: 90);
   static const locationDebounce = Duration(milliseconds: 750);
   static const ignoreMovementMeters = 75.0;
   static const invalidateCacheMovementMeters = 250.0;

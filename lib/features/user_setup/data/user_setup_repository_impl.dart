@@ -231,6 +231,9 @@ class UserSetupRepositoryImpl implements UserSetupRepository {
 
   @override
   Future<UserSetupState> saveVehicleDetails({
+    bool createNew = false,
+    String? previousVehicleRegistration,
+    String? vehicleId,
     String? vehicleMake,
     String? vehicleModel,
     required String vehicleRegistration,
@@ -250,6 +253,9 @@ class UserSetupRepositoryImpl implements UserSetupRepository {
     final normalizedRegistration = _normalizeVehicleRegistration(
       vehicleRegistration,
     );
+    final normalizedPreviousRegistration = _normalizePreviousRegistration(
+      previousVehicleRegistration,
+    );
     final normalizedMake = _normalizeOptionalVehicleText(
       vehicleMake,
       fieldCode: 'vehicle_make',
@@ -261,15 +267,37 @@ class UserSetupRepositoryImpl implements UserSetupRepository {
       fieldLabel: 'Vehicle model',
     );
 
+    final collectionSave = await _upsertProfileVehicle(
+      createNew: createNew,
+      previousVehicleRegistration: normalizedPreviousRegistration,
+      profile: profile,
+      vehicleId: vehicleId,
+      vehicleMake: normalizedMake,
+      vehicleModel: normalizedModel,
+      vehicleRegistration: normalizedRegistration,
+      vehicleType: normalizedType,
+    );
+    if (createNew && collectionSave == null) {
+      throw const ConfigurationFailure(
+        'Vehicle list storage is not deployed yet. Apply the latest profile migration before adding another vehicle.',
+        code: 'profile_vehicles_schema_missing',
+      );
+    }
+    final shouldUpdatePrimaryVehicle = collectionSave?.updatesPrimary ?? true;
+
     final payload = <String, Object?>{
-      'vehicle_type': normalizedType,
-      'vehicle_registration': normalizedRegistration,
-      'vehicle_make': normalizedMake,
-      'vehicle_model': normalizedModel,
       'setup_step': 'complete',
       'onboarding_completed_at': DateTime.now().toUtc().toIso8601String(),
       'version': _intFrom(profile, 'version', fallback: 1) + 1,
     };
+    if (shouldUpdatePrimaryVehicle) {
+      payload.addAll({
+        'vehicle_type': normalizedType,
+        'vehicle_registration': normalizedRegistration,
+        'vehicle_make': normalizedMake,
+        'vehicle_model': normalizedModel,
+      });
+    }
 
     try {
       await client
@@ -299,6 +327,234 @@ class UserSetupRepositoryImpl implements UserSetupRepository {
       step: 'complete',
       message: 'Vehicle details saved',
     );
+  }
+
+  Future<_ProfileVehicleSaveResult?> _upsertProfileVehicle({
+    required bool createNew,
+    required String? previousVehicleRegistration,
+    required Map<String, Object?> profile,
+    required String? vehicleId,
+    required String? vehicleMake,
+    required String? vehicleModel,
+    required String vehicleRegistration,
+    required String vehicleType,
+  }) async {
+    final client = _readyClient();
+    final userId = client.auth.currentUser!.id;
+
+    try {
+      var existingVehicles = await _loadProfileVehicleRows(userId);
+      if (existingVehicles.isEmpty) {
+        await _seedLegacyProfileVehicle(profile);
+        existingVehicles = await _loadProfileVehicleRows(userId);
+      }
+
+      if (createNew) {
+        if (_hasVehicleRegistration(existingVehicles, vehicleRegistration)) {
+          throw const ValidationFailure(
+            'This vehicle is already saved.',
+            code: 'vehicle_already_saved',
+          );
+        }
+
+        final saved = await client
+            .from('profile_vehicles')
+            .insert({
+              'user_id': userId,
+              'vehicle_type': vehicleType,
+              'vehicle_registration': vehicleRegistration,
+              'vehicle_make': vehicleMake,
+              'vehicle_model': vehicleModel,
+              'is_primary': existingVehicles.isEmpty,
+            })
+            .select('is_primary')
+            .single();
+
+        return _ProfileVehicleSaveResult(
+          updatesPrimary: _boolFrom(saved['is_primary']),
+        );
+      }
+
+      final editableVehicleId = _editableProfileVehicleId(vehicleId);
+      if (editableVehicleId != null) {
+        final target = _vehicleRowById(existingVehicles, editableVehicleId);
+        if (target != null) {
+          return _updateProfileVehicleRow(
+            client: client,
+            row: target,
+            userId: userId,
+            vehicleMake: vehicleMake,
+            vehicleModel: vehicleModel,
+            vehicleRegistration: vehicleRegistration,
+            vehicleType: vehicleType,
+          );
+        }
+      }
+
+      if (previousVehicleRegistration != null) {
+        final target = _vehicleRowByRegistration(
+          existingVehicles,
+          previousVehicleRegistration,
+        );
+        if (target != null) {
+          return _updateProfileVehicleRow(
+            client: client,
+            row: target,
+            userId: userId,
+            vehicleMake: vehicleMake,
+            vehicleModel: vehicleModel,
+            vehicleRegistration: vehicleRegistration,
+            vehicleType: vehicleType,
+          );
+        }
+      }
+
+      Map<String, Object?>? existing;
+      for (final row in existingVehicles) {
+        if (_stringFrom(row, 'vehicle_registration') == vehicleRegistration) {
+          existing = row;
+          break;
+        }
+      }
+      final updatesPrimary =
+          existingVehicles.isEmpty || _boolFrom(existing?['is_primary']);
+
+      final saved = await client
+          .from('profile_vehicles')
+          .upsert({
+            'user_id': userId,
+            'vehicle_type': vehicleType,
+            'vehicle_registration': vehicleRegistration,
+            'vehicle_make': vehicleMake,
+            'vehicle_model': vehicleModel,
+            'is_primary': updatesPrimary,
+          }, onConflict: 'user_id,vehicle_registration')
+          .select('is_primary')
+          .single();
+
+      return _ProfileVehicleSaveResult(
+        updatesPrimary: _boolFrom(saved['is_primary']),
+      );
+    } on sb.PostgrestException catch (error) {
+      if (_isProfileVehiclesSchemaUnavailable(error)) {
+        return null;
+      }
+      if (_isUniqueViolation(error)) {
+        throw const ValidationFailure(
+          'This vehicle is already saved.',
+          code: 'vehicle_already_saved',
+        );
+      }
+      throw _profileWriteFailure(
+        error,
+        fallbackMessage: 'Could not save your vehicle. Please try again.',
+      );
+    }
+  }
+
+  Future<List<Map<String, Object?>>> _loadProfileVehicleRows(
+    String userId,
+  ) async {
+    final response = await _client
+        .from('profile_vehicles')
+        .select('id,vehicle_registration,is_primary')
+        .eq('user_id', userId);
+    return (response as List)
+        .whereType<Map>()
+        .map((row) => Map<String, Object?>.from(row))
+        .toList(growable: false);
+  }
+
+  bool _hasVehicleRegistration(
+    List<Map<String, Object?>> rows,
+    String registration,
+  ) {
+    for (final row in rows) {
+      if (_stringFrom(row, 'vehicle_registration') == registration) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Map<String, Object?>? _vehicleRowById(
+    List<Map<String, Object?>> rows,
+    String id,
+  ) {
+    for (final row in rows) {
+      if (_stringFrom(row, 'id') == id) return row;
+    }
+    return null;
+  }
+
+  Map<String, Object?>? _vehicleRowByRegistration(
+    List<Map<String, Object?>> rows,
+    String registration,
+  ) {
+    for (final row in rows) {
+      if (_stringFrom(row, 'vehicle_registration') == registration) {
+        return row;
+      }
+    }
+    return null;
+  }
+
+  Future<_ProfileVehicleSaveResult> _updateProfileVehicleRow({
+    required sb.SupabaseClient client,
+    required Map<String, Object?> row,
+    required String userId,
+    required String? vehicleMake,
+    required String? vehicleModel,
+    required String vehicleRegistration,
+    required String vehicleType,
+  }) async {
+    final updatesPrimary = _boolFrom(row['is_primary']);
+    final rowId = _stringFrom(row, 'id');
+    final previousRegistration = _stringFrom(row, 'vehicle_registration');
+
+    final update = client
+        .from('profile_vehicles')
+        .update({
+          'vehicle_type': vehicleType,
+          'vehicle_registration': vehicleRegistration,
+          'vehicle_make': vehicleMake,
+          'vehicle_model': vehicleModel,
+        })
+        .eq('user_id', userId);
+    final filtered = rowId == null
+        ? update.eq('vehicle_registration', previousRegistration ?? '')
+        : update.eq('id', rowId);
+    final saved = await filtered.select('is_primary').single();
+
+    return _ProfileVehicleSaveResult(
+      updatesPrimary: _boolFrom(saved['is_primary']) || updatesPrimary,
+    );
+  }
+
+  String? _editableProfileVehicleId(String? vehicleId) {
+    final id = vehicleId?.trim();
+    if (id == null || id.isEmpty || id.startsWith('legacy-')) return null;
+    return id;
+  }
+
+  Future<void> _seedLegacyProfileVehicle(Map<String, Object?> profile) async {
+    final userId = _client.auth.currentUser!.id;
+    final registration = _stringFrom(profile, 'vehicle_registration');
+    final type = _stringFrom(profile, 'vehicle_type');
+    if (registration == null ||
+        type == null ||
+        !const {'bike', 'car'}.contains(type)) {
+      return;
+    }
+
+    await _client.from('profile_vehicles').upsert({
+      'user_id': userId,
+      'vehicle_type': type,
+      'vehicle_registration': registration,
+      'vehicle_make': _stringFrom(profile, 'vehicle_make'),
+      'vehicle_model': _stringFrom(profile, 'vehicle_model'),
+      'is_primary': true,
+    }, onConflict: 'user_id,vehicle_registration');
   }
 
   @override
@@ -1142,6 +1398,29 @@ class UserSetupRepositoryImpl implements UserSetupRepository {
                 text.contains('does not exist')));
   }
 
+  bool _isProfileVehiclesSchemaUnavailable(sb.PostgrestException error) {
+    final text = [error.code, error.message, error.details, error.hint]
+        .whereType<Object>()
+        .map((value) => value.toString())
+        .join(' ')
+        .toLowerCase();
+    return text.contains('profile_vehicles') &&
+        (text.contains('42p01') ||
+            text.contains('pgrst205') ||
+            text.contains('schema cache') ||
+            text.contains('could not find') ||
+            text.contains('does not exist'));
+  }
+
+  bool _isUniqueViolation(sb.PostgrestException error) {
+    final text = [error.code, error.message, error.details, error.hint]
+        .whereType<Object>()
+        .map((value) => value.toString())
+        .join(' ')
+        .toLowerCase();
+    return text.contains('23505') || text.contains('duplicate key');
+  }
+
   AppFailure _profileWriteFailure(
     sb.PostgrestException error, {
     required String fallbackMessage,
@@ -1974,6 +2253,13 @@ class UserSetupRepositoryImpl implements UserSetupRepository {
     return fallback;
   }
 
+  bool _boolFrom(Object? value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    final normalized = value?.toString().trim().toLowerCase();
+    return normalized == 'true' || normalized == '1';
+  }
+
   bool _hasText(String? value) => value != null && value.trim().isNotEmpty;
 
   String? _nullIfBlank(String? value) {
@@ -2103,6 +2389,13 @@ class UserSetupRepositoryImpl implements UserSetupRepository {
     return IndianVehicleRegistration.normalize(value)!;
   }
 
+  String? _normalizePreviousRegistration(String? value) {
+    final text = value?.trim();
+    if (text == null || text.isEmpty) return null;
+    return IndianVehicleRegistration.normalize(text) ??
+        IndianVehicleRegistration.compact(text);
+  }
+
   String? _normalizeOptionalVehicleText(
     String? value, {
     required String fieldCode,
@@ -2122,6 +2415,12 @@ class UserSetupRepositoryImpl implements UserSetupRepository {
 
 const _descriptionMaxLength = 200;
 const _descriptionMinLength = 50;
+
+class _ProfileVehicleSaveResult {
+  const _ProfileVehicleSaveResult({required this.updatesPrimary});
+
+  final bool updatesPrimary;
+}
 
 String _stableHash(String value) {
   const fnvPrime = 16777619;

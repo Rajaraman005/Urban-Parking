@@ -212,23 +212,26 @@ class ListingHostCard extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _HostActionButton(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF111827),
-                    icon: Icons.mode_comment_outlined,
-                    isEnabled: onMessageTap != null,
-                    onTap: onMessageTap,
-                    tooltip: 'Message host',
-                  ),
-                  const SizedBox(width: 8),
-                  _HostActionButton(
-                    backgroundColor: Colors.black,
-                    foregroundColor: Colors.white,
-                    icon: Icons.call_rounded,
-                    isEnabled: onCallTap != null,
-                    onTap: onCallTap,
-                    tooltip: 'Call host',
-                  ),
+                  if (onMessageTap != null)
+                    _HostActionButton(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF111827),
+                      icon: Icons.mode_comment_outlined,
+                      isEnabled: true,
+                      onTap: onMessageTap,
+                      tooltip: 'Message host',
+                    ),
+                  if (onCallTap != null) ...[
+                    if (onMessageTap != null) const SizedBox(width: 8),
+                    _HostActionButton(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      icon: Icons.call_rounded,
+                      isEnabled: true,
+                      onTap: onCallTap,
+                      tooltip: 'Call host',
+                    ),
+                  ],
                 ],
               ),
             ),

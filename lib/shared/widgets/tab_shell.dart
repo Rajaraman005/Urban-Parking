@@ -61,10 +61,16 @@ class TabNavigationHistoryController extends Notifier<List<int>> {
 }
 
 class TabShell extends ConsumerStatefulWidget {
-  const TabShell({required this.currentIndex, required this.child, super.key});
+  const TabShell({
+    required this.currentIndex,
+    required this.child,
+    super.key,
+    this.resizeToAvoidBottomInset,
+  });
 
   final int currentIndex;
   final Widget child;
+  final bool? resizeToAvoidBottomInset;
 
   @override
   ConsumerState<TabShell> createState() => _TabShellState();
@@ -115,6 +121,7 @@ class _TabShellState extends ConsumerState<TabShell> {
         context.go(UrbanBottomNav.routeForIndex(previous));
       },
       child: Scaffold(
+        resizeToAvoidBottomInset: widget.resizeToAvoidBottomInset,
         body: widget.child,
         bottomNavigationBar: UrbanBottomNav(
           currentIndex: widget.currentIndex,

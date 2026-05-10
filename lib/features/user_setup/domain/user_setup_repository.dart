@@ -17,6 +17,9 @@ abstract interface class UserSetupRepository {
     required String dob,
   });
   Future<UserSetupState> saveVehicleDetails({
+    bool createNew = false,
+    String? previousVehicleRegistration,
+    String? vehicleId,
     String? vehicleMake,
     String? vehicleModel,
     required String vehicleRegistration,

@@ -68,6 +68,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     ref.listen(authControllerProvider, (previous, next) {
       final value = next.value;
       if (value?.status == AuthStatus.authenticated && mounted) {
+        TextInput.finishAutofillContext(shouldSave: true);
         if (value!.profile?.hasCompletedOnboarding == true) {
           context.go('/home');
         } else {
@@ -104,175 +105,198 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     child: Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 430),
-                        child: Form(
-                          key: _formKey,
-                          child: ListView(
-                            shrinkWrap: true,
-                            children: [
-                              Image.asset(
-                                'src/assets/logo-mark.png',
-                                width: 96,
-                                height: 96,
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                _isSignup
-                                    ? 'Create your account'
-                                    : 'Welcome back',
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context).textTheme.headlineSmall
-                                    ?.copyWith(fontWeight: FontWeight.w900),
-                              ),
-                              const SizedBox(height: 24),
-                              if (_isSignup)
+                        child: AutofillGroup(
+                          onDisposeAction: AutofillContextAction.cancel,
+                          child: Form(
+                            key: _formKey,
+                            child: ListView(
+                              shrinkWrap: true,
+                              children: [
+                                Image.asset(
+                                  'src/assets/logo-mark.png',
+                                  width: 96,
+                                  height: 96,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  _isSignup
+                                      ? 'Create your account'
+                                      : 'Welcome back',
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineSmall
+                                      ?.copyWith(fontWeight: FontWeight.w900),
+                                ),
+                                const SizedBox(height: 24),
+                                if (_isSignup)
+                                  TextFormField(
+                                    controller: _nameController,
+                                    textInputAction: TextInputAction.next,
+                                    autofillHints: const [AutofillHints.name],
+                                    style: _fieldTextStyle,
+                                    decoration: _fieldDecoration('Full name'),
+                                    validator: (value) {
+                                      final trimmed = value?.trim() ?? '';
+                                      if (trimmed.length < 2) {
+                                        return 'Enter your full name';
+                                      }
+                                      if (trimmed.length > 80) {
+                                        return 'Name is too long';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                if (_isSignup) const SizedBox(height: 12),
                                 TextFormField(
-                                  controller: _nameController,
+                                  controller: _emailController,
+                                  keyboardType: TextInputType.emailAddress,
                                   textInputAction: TextInputAction.next,
+                                  textCapitalization: TextCapitalization.none,
+                                  autocorrect: false,
+                                  autofillHints: const [
+                                    AutofillHints.username,
+                                    AutofillHints.email,
+                                  ],
                                   style: _fieldTextStyle,
-                                  decoration: _fieldDecoration('Full name'),
+                                  decoration: _fieldDecoration('Email'),
                                   validator: (value) {
-                                    final trimmed = value?.trim() ?? '';
-                                    if (trimmed.length < 2) {
-                                      return 'Enter your full name';
+                                    final email =
+                                        value?.trim().toLowerCase() ?? '';
+                                    return RegExp(
+                                          r'^[^@]+@[^@]+\.[^@]+$',
+                                        ).hasMatch(email)
+                                        ? null
+                                        : 'Enter a valid email address';
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  controller: _passwordController,
+                                  obscureText: _obscurePassword,
+                                  textInputAction: TextInputAction.done,
+                                  autocorrect: false,
+                                  enableSuggestions: false,
+                                  autofillHints: _isSignup
+                                      ? const [AutofillHints.newPassword]
+                                      : const [AutofillHints.password],
+                                  onFieldSubmitted: (_) {
+                                    if (!loading) {
+                                      _submit();
                                     }
-                                    if (trimmed.length > 80) {
-                                      return 'Name is too long';
+                                  },
+                                  style: _fieldTextStyle,
+                                  decoration: _fieldDecoration(
+                                    'Password',
+                                    suffixIcon: IconButton(
+                                      tooltip: _obscurePassword
+                                          ? 'Show password'
+                                          : 'Hide password',
+                                      onPressed: () {
+                                        setState(() {
+                                          _obscurePassword = !_obscurePassword;
+                                        });
+                                      },
+                                      icon: Icon(
+                                        _obscurePassword
+                                            ? Icons.visibility_off_rounded
+                                            : Icons.visibility_rounded,
+                                        color: _fieldLabelColor,
+                                      ),
+                                    ),
+                                  ),
+                                  validator: (value) {
+                                    final password = value ?? '';
+                                    if (!_isSignup && password.isNotEmpty) {
+                                      return null;
+                                    }
+                                    if (password.length < 8) {
+                                      return 'Password must be at least 8 characters';
+                                    }
+                                    if (!RegExp('[A-Z]').hasMatch(password)) {
+                                      return 'Use at least one uppercase letter';
+                                    }
+                                    if (!RegExp('[a-z]').hasMatch(password)) {
+                                      return 'Use at least one lowercase letter';
+                                    }
+                                    if (!RegExp('[0-9]').hasMatch(password)) {
+                                      return 'Use at least one number';
+                                    }
+                                    if (!RegExp(
+                                      r'[^A-Za-z0-9]',
+                                    ).hasMatch(password)) {
+                                      return 'Use at least one symbol';
                                     }
                                     return null;
                                   },
                                 ),
-                              if (_isSignup) const SizedBox(height: 12),
-                              TextFormField(
-                                controller: _emailController,
-                                keyboardType: TextInputType.emailAddress,
-                                textInputAction: TextInputAction.next,
-                                style: _fieldTextStyle,
-                                decoration: _fieldDecoration('Email'),
-                                validator: (value) {
-                                  final email =
-                                      value?.trim().toLowerCase() ?? '';
-                                  return RegExp(
-                                        r'^[^@]+@[^@]+\.[^@]+$',
-                                      ).hasMatch(email)
-                                      ? null
-                                      : 'Enter a valid email address';
-                                },
-                              ),
-                              const SizedBox(height: 12),
-                              TextFormField(
-                                controller: _passwordController,
-                                obscureText: _obscurePassword,
-                                style: _fieldTextStyle,
-                                decoration: _fieldDecoration(
-                                  'Password',
-                                  suffixIcon: IconButton(
-                                    tooltip: _obscurePassword
-                                        ? 'Show password'
-                                        : 'Hide password',
-                                    onPressed: () {
-                                      setState(() {
-                                        _obscurePassword = !_obscurePassword;
-                                      });
-                                    },
-                                    icon: Icon(
-                                      _obscurePassword
-                                          ? Icons.visibility_off_rounded
-                                          : Icons.visibility_rounded,
-                                      color: _fieldLabelColor,
+                                const SizedBox(height: 18),
+                                if (auth.hasError)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: Text(
+                                      _formatAuthError(auth.error!),
+                                      style: TextStyle(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.error,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                validator: (value) {
-                                  final password = value ?? '';
-                                  if (!_isSignup && password.isNotEmpty) {
-                                    return null;
-                                  }
-                                  if (password.length < 8) {
-                                    return 'Password must be at least 8 characters';
-                                  }
-                                  if (!RegExp('[A-Z]').hasMatch(password)) {
-                                    return 'Use at least one uppercase letter';
-                                  }
-                                  if (!RegExp('[a-z]').hasMatch(password)) {
-                                    return 'Use at least one lowercase letter';
-                                  }
-                                  if (!RegExp('[0-9]').hasMatch(password)) {
-                                    return 'Use at least one number';
-                                  }
-                                  if (!RegExp(
-                                    r'[^A-Za-z0-9]',
-                                  ).hasMatch(password)) {
-                                    return 'Use at least one symbol';
-                                  }
-                                  return null;
-                                },
-                              ),
-                              const SizedBox(height: 18),
-                              if (auth.hasError)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: Text(
-                                    _formatAuthError(auth.error!),
-                                    style: TextStyle(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.error,
-                                    ),
-                                  ),
-                                ),
-                              FilledButton.icon(
-                                onPressed: loading ? null : _submit,
-                                icon: loading
-                                    ? const SizedBox.square(
-                                        dimension: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
+                                FilledButton.icon(
+                                  onPressed: loading ? null : _submit,
+                                  icon: loading
+                                      ? const SizedBox.square(
+                                          dimension: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : Icon(
+                                          _isSignup
+                                              ? Icons.person_add_alt_1
+                                              : Icons.login,
                                         ),
-                                      )
-                                    : Icon(
-                                        _isSignup
-                                            ? Icons.person_add_alt_1
-                                            : Icons.login,
-                                      ),
-                                label: Text(
-                                  _isSignup ? 'Create account' : 'Log in',
+                                  label: Text(
+                                    _isSignup ? 'Create account' : 'Log in',
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 12),
-                              const _AuthDivider(),
-                              const SizedBox(height: 12),
-                              OutlinedButton(
-                                onPressed: loading ? null : _signInWithGoogle,
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    GoogleLogo(size: 20),
-                                    SizedBox(width: 10),
-                                    Text('Continue with Google'),
-                                  ],
+                                const SizedBox(height: 12),
+                                const _AuthDivider(),
+                                const SizedBox(height: 12),
+                                OutlinedButton(
+                                  onPressed: loading ? null : _signInWithGoogle,
+                                  child: const Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      GoogleLogo(size: 20),
+                                      SizedBox(width: 10),
+                                      Text('Continue with Google'),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 10),
-                              TextButton(
-                                onPressed: loading
-                                    ? null
-                                    : () => setState(
-                                        () => _isSignup = !_isSignup,
-                                      ),
-                                child: Text(
-                                  _isSignup
-                                      ? 'Already have an account? Log in'
-                                      : 'New here? Create an account',
+                                const SizedBox(height: 10),
+                                TextButton(
+                                  onPressed: loading
+                                      ? null
+                                      : () => setState(
+                                          () => _isSignup = !_isSignup,
+                                        ),
+                                  child: Text(
+                                    _isSignup
+                                        ? 'Already have an account? Log in'
+                                        : 'New here? Create an account',
+                                  ),
                                 ),
-                              ),
-                              TextButton(
-                                onPressed: loading
-                                    ? null
-                                    : () => context.push('/forgot-password'),
-                                child: const Text('Forgot password?'),
-                              ),
-                            ],
+                                TextButton(
+                                  onPressed: loading
+                                      ? null
+                                      : () => context.push('/forgot-password'),
+                                  child: const Text('Forgot password?'),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),

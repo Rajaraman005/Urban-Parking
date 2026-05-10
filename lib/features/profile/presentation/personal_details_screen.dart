@@ -45,137 +45,134 @@ class PersonalDetailsScreen extends ConsumerWidget {
               }
             },
           ),
-          Transform.translate(
-            offset: const Offset(0, -52),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
-              child: Column(
-                children: [
-                  _EditableProfilePhoto(
-                    avatarUrl: displayProfileAvatarUrl(profile),
-                    fullName: name,
-                    loading: profileBusy,
-                    onEdit: profileBusy
-                        ? null
-                        : () => _pickAndUploadAvatar(context, ref),
-                  ),
-                  const SizedBox(height: 18),
-                  _DetailsSection(
-                    onEdit: profileBusy
-                        ? null
-                        : () => _openIdentityEditor(
-                            auth: auth,
-                            context: context,
-                            displayName: name,
-                            ref: ref,
-                          ),
-                    title: 'Identity',
-                    children: [
-                      _DetailRow(
-                        icon: Icons.person_outline_rounded,
-                        label: 'Full name',
-                        value: name,
-                      ),
-                      _DetailRow(
-                        icon: Icons.mail_outline_rounded,
-                        label: 'Email',
-                        value: email,
-                      ),
-                      _DetailRow(
-                        icon: Icons.phone_iphone_rounded,
-                        label: 'Mobile',
-                        value: _emptyLabel(profile?.phone),
-                        muted: _isBlank(profile?.phone),
-                      ),
-                      _DetailRow(
-                        icon: Icons.wc_rounded,
-                        label: 'Gender',
-                        value: _genderLabel(profile?.gender),
-                        muted: _isBlank(profile?.gender),
-                      ),
-                      _DetailRow(
-                        icon: Icons.cake_outlined,
-                        label: 'Date of birth',
-                        value: _dateLabel(profile?.dob),
-                        muted: profile?.dob == null,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  _DetailsSection(
-                    title: 'Vehicle',
-                    children: [
-                      _DetailRow(
-                        icon: _vehicleIcon(profile?.vehicleType),
-                        label: 'Type',
-                        value: _vehicleTypeLabel(profile?.vehicleType),
-                        muted: _isBlank(profile?.vehicleType),
-                      ),
-                      _DetailRow(
-                        icon: Icons.confirmation_number_outlined,
-                        label: 'Registration',
-                        value: _emptyLabel(profile?.vehicleRegistration),
-                        muted: _isBlank(profile?.vehicleRegistration),
-                      ),
-                      _DetailRow(
-                        icon: Icons.directions_car_outlined,
-                        label: 'Make and model',
-                        value: _vehicleMakeModelLabel(
-                          profile?.vehicleMake,
-                          profile?.vehicleModel,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+            child: Column(
+              children: [
+                _EditableProfilePhoto(
+                  avatarUrl: displayProfileAvatarUrl(profile),
+                  fullName: name,
+                  loading: profileBusy,
+                  onEdit: profileBusy
+                      ? null
+                      : () => _pickAndUploadAvatar(context, ref),
+                ),
+                const SizedBox(height: 18),
+                _DetailsSection(
+                  onEdit: profileBusy
+                      ? null
+                      : () => _openIdentityEditor(
+                          auth: auth,
+                          context: context,
+                          displayName: name,
+                          ref: ref,
                         ),
-                        muted:
-                            _isBlank(profile?.vehicleMake) &&
-                            _isBlank(profile?.vehicleModel),
+                  title: 'Identity',
+                  children: [
+                    _DetailRow(
+                      icon: Icons.person_outline_rounded,
+                      label: 'Full name',
+                      value: name,
+                    ),
+                    _DetailRow(
+                      icon: Icons.mail_outline_rounded,
+                      label: 'Email',
+                      value: email,
+                    ),
+                    _DetailRow(
+                      icon: Icons.phone_iphone_rounded,
+                      label: 'Mobile',
+                      value: _emptyLabel(profile?.phone),
+                      muted: _isBlank(profile?.phone),
+                    ),
+                    _DetailRow(
+                      icon: Icons.wc_rounded,
+                      label: 'Gender',
+                      value: _genderLabel(profile?.gender),
+                      muted: _isBlank(profile?.gender),
+                    ),
+                    _DetailRow(
+                      icon: Icons.cake_outlined,
+                      label: 'Date of birth',
+                      value: _dateLabel(profile?.dob),
+                      muted: profile?.dob == null,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _DetailsSection(
+                  title: 'Vehicle',
+                  children: [
+                    _DetailRow(
+                      icon: _vehicleIcon(profile?.vehicleType),
+                      label: 'Type',
+                      value: _vehicleTypeLabel(profile?.vehicleType),
+                      muted: _isBlank(profile?.vehicleType),
+                    ),
+                    _DetailRow(
+                      icon: Icons.confirmation_number_outlined,
+                      label: 'Registration',
+                      value: _emptyLabel(profile?.vehicleRegistration),
+                      muted: _isBlank(profile?.vehicleRegistration),
+                    ),
+                    _DetailRow(
+                      icon: Icons.directions_car_outlined,
+                      label: 'Make and model',
+                      value: _vehicleMakeModelLabel(
+                        profile?.vehicleMake,
+                        profile?.vehicleModel,
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  _DetailsSection(
-                    title: 'Account',
-                    children: [
-                      _DetailRow(
-                        icon: Icons.verified_user_outlined,
-                        label: 'Status',
-                        value: isSignedIn ? 'Active' : 'Guest',
-                      ),
-                      _DetailRow(
-                        icon: Icons.flag_outlined,
-                        label: 'Intent',
-                        value: _intentLabel(profile?.intent),
-                      ),
-                      _DetailRow(
-                        icon: Icons.route_outlined,
-                        label: 'Setup step',
-                        value: _setupStepLabel(profile?.setupStep),
-                      ),
-                      _DetailRow(
-                        icon: Icons.calendar_today_outlined,
-                        label: 'Onboarding',
-                        value: _dateLabel(profile?.onboardingCompletedAt),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  _DetailsSection(
-                    title: 'Reference',
-                    children: [
-                      _DetailRow(
-                        icon: Icons.fingerprint_rounded,
-                        label: 'User ID',
-                        value: _shortId(auth?.user?.id),
-                        monospaced: true,
-                      ),
-                      _DetailRow(
-                        icon: Icons.badge_outlined,
-                        label: 'Profile ID',
-                        value: _shortId(profile?.id),
-                        monospaced: true,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                      muted:
+                          _isBlank(profile?.vehicleMake) &&
+                          _isBlank(profile?.vehicleModel),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _DetailsSection(
+                  title: 'Account',
+                  children: [
+                    _DetailRow(
+                      icon: Icons.verified_user_outlined,
+                      label: 'Status',
+                      value: isSignedIn ? 'Active' : 'Guest',
+                    ),
+                    _DetailRow(
+                      icon: Icons.flag_outlined,
+                      label: 'Intent',
+                      value: _intentLabel(profile?.intent),
+                    ),
+                    _DetailRow(
+                      icon: Icons.route_outlined,
+                      label: 'Setup step',
+                      value: _setupStepLabel(profile?.setupStep),
+                    ),
+                    _DetailRow(
+                      icon: Icons.calendar_today_outlined,
+                      label: 'Onboarding',
+                      value: _dateLabel(profile?.onboardingCompletedAt),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _DetailsSection(
+                  title: 'Reference',
+                  children: [
+                    _DetailRow(
+                      icon: Icons.fingerprint_rounded,
+                      label: 'User ID',
+                      value: _shortId(auth?.user?.id),
+                      monospaced: true,
+                    ),
+                    _DetailRow(
+                      icon: Icons.badge_outlined,
+                      label: 'Profile ID',
+                      value: _shortId(profile?.id),
+                      monospaced: true,
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
@@ -390,7 +387,7 @@ class _PersonalDetailsHeader extends StatelessWidget {
     return ColoredBox(
       color: const Color(0xFFB9F45E),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 10, 20, 58),
+        padding: const EdgeInsets.fromLTRB(14, 6, 20, 10),
         child: Row(
           children: [
             IconButton(

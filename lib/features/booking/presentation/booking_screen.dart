@@ -1,14 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/errors/app_failure.dart';
 import '../../../shared/formatters.dart';
 import '../../../shared/widgets/app_screen.dart';
+import '../../../shared/widgets/app_toast.dart';
 import '../../../shared/widgets/listing_context_section.dart';
 import '../../../shared/widgets/listing_details_page.dart';
 import '../../../shared/widgets/state_view.dart';
 import '../../../shared/widgets/urban_bottom_nav.dart';
+import '../../auth/presentation/auth_controller.dart';
+import '../../messaging/presentation/messaging_controller.dart';
 import '../../parking/domain/parking_spot.dart';
 import '../../profile/presentation/profile_display.dart';
 import 'booking_controller.dart';
@@ -83,7 +89,14 @@ class _PropertyDetailsContent extends ConsumerWidget {
     final hostName =
         profileDisplay?.displayName ?? spot.hostName ?? 'Lotzi Host';
     final hostAvatarUrl = profileDisplay?.avatarUrl ?? spot.hostAvatarUrl;
-    final hostPhone = profileDisplay?.phone ?? spot.hostPhone;
+    final hostAllowsPublicPhone =
+        profileDisplay?.profile?.showPhoneNumber ?? !spot.isHostedByCurrentUser;
+    final hostPhone = hostAllowsPublicPhone
+        ? profileDisplay?.phone ?? spot.hostPhone
+        : null;
+    final phoneUnavailableMessage = hostAllowsPublicPhone
+        ? 'Host phone number is not available yet.'
+        : 'Host has hidden their phone number.';
 
     return ListingDetailsPage(
       address: spot.address.isEmpty ? spot.locality : spot.address,
@@ -108,14 +121,11 @@ class _PropertyDetailsContent extends ConsumerWidget {
             context,
             phoneNumber: hostPhone,
             scheme: 'tel',
-            unavailableMessage: 'Host phone number is not available yet.',
+            unavailableMessage: phoneUnavailableMessage,
           ),
-          onMessageTap: _hostContactAction(
-            context,
-            phoneNumber: hostPhone,
-            scheme: 'sms',
-            unavailableMessage: 'Host phone number is not available yet.',
-          ),
+          onMessageTap: spot.isHostedByCurrentUser
+              ? null
+              : () => unawaited(_openHostConversation(context, ref, spot)),
         ),
       ],
       stats: _statsFor(spot),
@@ -252,5 +262,41 @@ class _PropertyDetailsContent extends ConsumerWidget {
     if (rawValue == null) return null;
     final cleaned = rawValue.replaceAll(RegExp(r'[^\d+]'), '');
     return cleaned.isEmpty ? null : cleaned;
+  }
+
+  Future<void> _openHostConversation(
+    BuildContext context,
+    WidgetRef ref,
+    ParkingSpot spot,
+  ) async {
+    var auth = ref.read(authControllerProvider).value;
+    try {
+      auth ??= await ref.read(authControllerProvider.future);
+    } catch (_) {
+      auth = null;
+    }
+    if (!context.mounted) return;
+
+    if (auth?.isAuthenticated != true) {
+      AppToast.info(context, 'Sign in to message this host.');
+      context.push('/auth');
+      return;
+    }
+
+    try {
+      final conversation = await ref
+          .read(startPropertyConversationControllerProvider.notifier)
+          .start(spot.id);
+      if (!context.mounted) return;
+      context.push('/messages/${conversation.id}');
+    } catch (error) {
+      if (!context.mounted) return;
+      AppToast.error(context, _openMessagesErrorMessage(error));
+    }
+  }
+
+  String _openMessagesErrorMessage(Object error) {
+    if (error is AppFailure) return error.message;
+    return 'Could not open messages. Please try again.';
   }
 }

@@ -1,6 +1,12 @@
 class AppConfig {
   const AppConfig._();
 
+  static const _defaultApiBaseUrl = 'https://lotzi.in/api/v1';
+  static const _legacyApiHosts = {
+    'flowaux.in': 'lotzi.in',
+    'www.flowaux.in': 'www.lotzi.in',
+  };
+
   static const appName = 'Lotzi';
   static const appEnv = String.fromEnvironment(
     'APP_ENV',
@@ -9,11 +15,11 @@ class AppConfig {
       defaultValue: 'development',
     ),
   );
-  static const apiBaseUrl = String.fromEnvironment(
+  static const _rawApiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: String.fromEnvironment(
       'EXPO_PUBLIC_API_BASE_URL',
-      defaultValue: 'https://lotzi.in/api/v1',
+      defaultValue: _defaultApiBaseUrl,
     ),
   );
   static const supabaseUrl = String.fromEnvironment(
@@ -55,6 +61,7 @@ class AppConfig {
   static const geoCacheBoxName = 'geo_discovery_cache_v1';
   static const authSessionStorageKey = 'urban_parking.auth.session';
 
+  static String get apiBaseUrl => _normalizeApiBaseUrl(_rawApiBaseUrl);
   static bool get isProduction => appEnv == 'production';
   static String get apiBaseHost =>
       Uri.tryParse(apiBaseUrl)?.host.toLowerCase() ?? 'invalid-api-host';
@@ -70,4 +77,17 @@ class AppConfig {
         ),
       ) &&
       !isProduction;
+
+  static String _normalizeApiBaseUrl(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return _defaultApiBaseUrl;
+
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) return trimmed;
+
+    final replacementHost = _legacyApiHosts[uri.host.toLowerCase()];
+    if (replacementHost == null) return trimmed;
+
+    return uri.replace(host: replacementHost).toString();
+  }
 }

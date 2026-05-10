@@ -115,6 +115,35 @@ function Get-PreferredDeviceId {
   return $null
 }
 
+function Resolve-AdbExecutable {
+  $candidates = @()
+
+  foreach ($name in @("ANDROID_HOME", "ANDROID_SDK_ROOT")) {
+    $root = [Environment]::GetEnvironmentVariable($name, "Process")
+    if (-not [string]::IsNullOrWhiteSpace($root)) {
+      $candidates += (Join-Path $root "platform-tools\adb.exe")
+    }
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+    $candidates += (Join-Path $env:LOCALAPPDATA "Android\Sdk\platform-tools\adb.exe")
+  }
+
+  $candidates += "adb"
+
+  foreach ($candidate in $candidates) {
+    if ($candidate -eq "adb") {
+      return $candidate
+    }
+
+    if (Test-Path -LiteralPath $candidate) {
+      return $candidate
+    }
+  }
+
+  return "adb"
+}
+
 function Format-FlutterDeviceList {
   param([object[]]$Devices)
 
@@ -127,6 +156,189 @@ function Format-FlutterDeviceList {
   }) -join [Environment]::NewLine)
 }
 
+function Get-FlutterDevices {
+  param([string]$FlutterExe)
+
+  $previousErrorActionPreference = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    $devicesOutput = & $FlutterExe devices --machine 2>$null
+    $exitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
+
+  $devicesJson = ($devicesOutput | Where-Object { $_ -match "^\s*[\[\{]" -or $_ -match "^\s*[\]\}]" -or $_ -match '^\s*"' -or $_ -match '^\s*,' }) -join [Environment]::NewLine
+  if ($exitCode -ne 0 -or -not $devicesJson) {
+    return @()
+  }
+
+  try {
+    return @($devicesJson | ConvertFrom-Json)
+  } catch {
+    return @()
+  }
+}
+
+function Get-MatchingDeviceAliases {
+  param(
+    [object[]]$Devices,
+    [string]$Alias
+  )
+
+  if ($Alias -eq "android") {
+    return @(
+      $Devices |
+        Where-Object { $_.isSupported -and $_.targetPlatform -like "android*" } |
+        Sort-Object @{ Expression = { $_.emulator }; Ascending = $true }, name
+    )
+  }
+
+  if ($Alias -eq "ios") {
+    return @(
+      $Devices |
+        Where-Object { $_.isSupported -and $_.targetPlatform -like "ios*" } |
+        Sort-Object @{ Expression = { $_.emulator }; Ascending = $true }, name
+    )
+  }
+
+  return @()
+}
+
+function Test-AndroidAllDeviceAlias {
+  param([AllowNull()][string]$Alias)
+
+  if ([string]::IsNullOrWhiteSpace($Alias)) {
+    return $false
+  }
+
+  return $Alias.Trim().ToLowerInvariant() -in @(
+    "android:all",
+    "android-all",
+    "all-android",
+    "androids"
+  )
+}
+
+function Connect-AdbMdnsAndroidDevices {
+  param([string]$AdbExe)
+
+  try {
+    $services = & $AdbExe mdns services 2>$null
+  } catch {
+    return @()
+  }
+
+  if ($LASTEXITCODE -ne 0 -or -not $services) {
+    return @()
+  }
+
+  $targets = New-Object System.Collections.Generic.List[string]
+  $mdnsSerials = @{}
+  foreach ($line in $services) {
+    if ($line -notmatch "_adb-tls-connect\._tcp") {
+      continue
+    }
+
+    $match = [regex]::Match($line, "(\d{1,3}(?:\.\d{1,3}){3}:\d+)")
+    if ($match.Success) {
+      $target = $match.Groups[1].Value
+      $targets.Add($target)
+
+      $columns = @($line -split "\s+")
+      $serviceIndex = [Array]::IndexOf($columns, "_adb-tls-connect._tcp")
+      if ($serviceIndex -gt 0) {
+        $serviceName = ($columns[0..($serviceIndex - 1)] -join " ").Trim()
+        if ($serviceName) {
+          $mdnsSerials[$target] = "$serviceName._adb-tls-connect._tcp"
+        }
+      }
+    }
+  }
+
+  $connected = New-Object System.Collections.Generic.List[string]
+  foreach ($target in ($targets | Sort-Object -Unique)) {
+    try {
+      $result = (& $AdbExe connect $target 2>$null) -join " "
+      if ($LASTEXITCODE -eq 0 -and $result -match "connected|already connected") {
+        Write-Host "Connected Android wireless debugging endpoint $target" -ForegroundColor Cyan
+        if ($mdnsSerials.ContainsKey($target)) {
+          & $AdbExe disconnect $mdnsSerials[$target] 2>$null | Out-Null
+        }
+        $connected.Add($target)
+      }
+    } catch {
+      # Ignore individual stale mDNS entries and try the next discovered endpoint.
+    }
+  }
+
+  return @($connected)
+}
+
+function Remove-AdbMdnsSerialDevices {
+  param([string]$AdbExe)
+
+  try {
+    $devices = & $AdbExe devices -l 2>$null
+  } catch {
+    return @()
+  }
+
+  if ($LASTEXITCODE -ne 0 -or -not $devices) {
+    return @()
+  }
+
+  $hasIpConnectedDevice = @(
+    $devices |
+      Where-Object { $_ -match "^\d{1,3}(?:\.\d{1,3}){3}:\d+\s+device\b" }
+  ).Count -gt 0
+
+  if (-not $hasIpConnectedDevice) {
+    return @()
+  }
+
+  $removed = New-Object System.Collections.Generic.List[string]
+  foreach ($line in $devices) {
+    $match = [regex]::Match($line, "^(adb-.+?_adb-tls-connect\._tcp)\s+device\b")
+    if (-not $match.Success) {
+      continue
+    }
+
+    $serial = $match.Groups[1].Value.Trim()
+    try {
+      & $AdbExe disconnect $serial 2>$null | Out-Null
+      if ($LASTEXITCODE -eq 0) {
+        Write-Host "Removed duplicate Android wireless debugging entry $serial" -ForegroundColor DarkGray
+        $removed.Add($serial)
+      }
+    } catch {
+      # Ignore stale entries that disappeared between adb devices and adb disconnect.
+    }
+  }
+
+  return @($removed)
+}
+
+function Repair-AdbAndroidDeviceList {
+  $adb = Resolve-AdbExecutable
+  Connect-AdbMdnsAndroidDevices $adb | Out-Null
+  Remove-AdbMdnsSerialDevices $adb | Out-Null
+}
+
+function Get-ResolvedMatchingDevices {
+  param(
+    [string]$FlutterExe,
+    [string]$Alias
+  )
+
+  if ($Alias -eq "android") {
+    Repair-AdbAndroidDeviceList
+  }
+
+  $devices = Get-FlutterDevices $FlutterExe
+  return @(Get-MatchingDeviceAliases $devices $Alias)
+}
+
 function Resolve-DeviceAlias {
   param(
     [string]$FlutterExe,
@@ -137,32 +349,13 @@ function Resolve-DeviceAlias {
     return $Alias
   }
 
-  $devicesJson = (& $FlutterExe devices --machine) -join [Environment]::NewLine
-  if ($LASTEXITCODE -ne 0 -or -not $devicesJson) {
-    return $Alias
-  }
-
-  $parsedDevices = $devicesJson | ConvertFrom-Json
-  $devices = @($parsedDevices)
-  $matchingDevices = @()
-
-  if ($Alias -eq "android") {
-    $matchingDevices = @(
-      $devices |
-        Where-Object { $_.isSupported -and $_.targetPlatform -like "android*" } |
-        Sort-Object @{ Expression = { $_.emulator }; Ascending = $true }, name
-    )
-  }
-
-  if ($Alias -eq "ios") {
-    $matchingDevices = @(
-      $devices |
-        Where-Object { $_.isSupported -and $_.targetPlatform -like "ios*" } |
-        Sort-Object @{ Expression = { $_.emulator }; Ascending = $true }, name
-    )
-  }
+  $matchingDevices = @(Get-ResolvedMatchingDevices $FlutterExe $Alias)
 
   if ($matchingDevices.Count -eq 0) {
+    if ($Alias -eq "android") {
+      throw "No supported Android device is connected. If the phone changed Wi-Fi or wireless debugging restarted, open Developer options > Wireless debugging on the phone, then run: $((Resolve-AdbExecutable)) connect <phone-ip>:<pairing-port>. After it shows in 'flutter devices' as android-arm64, run npm run android again."
+    }
+
     return $Alias
   }
 
@@ -190,7 +383,7 @@ function Resolve-DeviceAlias {
   }
 
   $availableDevices = Format-FlutterDeviceList $matchingDevices
-  throw "Multiple $Alias devices are connected. Choose the phone explicitly with: scripts\flutter_with_env.ps1 run --device-id <device-id> or set `$env:URBAN_PARKING_DEVICE_ID='<device-id>'; npm run android$([Environment]::NewLine)Connected $Alias devices:$([Environment]::NewLine)$availableDevices"
+  throw "Multiple $Alias devices are connected. To run on every Android phone, use: npm run android:all. To run one phone, choose explicitly with: scripts\flutter_with_env.ps1 run --device-id <device-id> or set `$env:URBAN_PARKING_DEVICE_ID='<device-id>'; npm run android$([Environment]::NewLine)Connected $Alias devices:$([Environment]::NewLine)$availableDevices"
 }
 
 function Resolve-DeviceAliasesInArgs {
@@ -210,6 +403,119 @@ function Resolve-DeviceAliasesInArgs {
   return $resolvedArgs
 }
 
+function Get-DeviceIdArgumentIndex {
+  param([string[]]$ArgsToScan)
+
+  for ($index = 0; $index -lt $ArgsToScan.Count - 1; $index++) {
+    if ($ArgsToScan[$index] -in @("--device-id", "-d")) {
+      return $index
+    }
+  }
+
+  return -1
+}
+
+function Invoke-AndroidAllRun {
+  param(
+    [string]$FlutterExe,
+    [string[]]$ArgsToLaunch
+  )
+
+  $deviceArgIndex = Get-DeviceIdArgumentIndex $ArgsToLaunch
+  if ($deviceArgIndex -lt 0) {
+    return $false
+  }
+
+  $requestedDeviceAlias = $ArgsToLaunch[$deviceArgIndex + 1]
+  $isExplicitAndroidAll = Test-AndroidAllDeviceAlias $requestedDeviceAlias
+  $isAndroidAlias = $requestedDeviceAlias -eq "android"
+
+  if (-not $isExplicitAndroidAll -and -not $isAndroidAlias) {
+    return $false
+  }
+
+  if ($ArgsToLaunch.Count -eq 0 -or $ArgsToLaunch[0] -ne "run") {
+    throw "The android:all device alias is only supported for 'flutter run'. Use: npm run android:all"
+  }
+
+  $matchingDevices = @(Get-ResolvedMatchingDevices $FlutterExe "android")
+  if ($matchingDevices.Count -eq 0) {
+    throw "No supported Android device is connected. Run 'npm run devices', enable wireless debugging on each phone, then run 'npm run android:all' again."
+  }
+
+  if ($isAndroidAlias -and $matchingDevices.Count -lt 2) {
+    return $false
+  }
+
+  $argsWithoutAllAlias = New-Object System.Collections.Generic.List[string]
+  for ($index = 0; $index -lt $ArgsToLaunch.Count; $index++) {
+    if ($index -eq $deviceArgIndex) {
+      $index++
+      continue
+    }
+
+    $argsWithoutAllAlias.Add($ArgsToLaunch[$index])
+  }
+
+  Write-Host "Launching Lotzi on $($matchingDevices.Count) Android device(s)..." -ForegroundColor Green
+  if ($isAndroidAlias) {
+    Write-Host "Multiple Android phones detected for '--device-id android'; launching all of them." -ForegroundColor Cyan
+  }
+  Write-Host (Format-FlutterDeviceList $matchingDevices)
+
+  $scriptPath = Join-Path $PSScriptRoot "flutter_with_env.ps1"
+  $powershellExe = (Get-Command powershell).Source
+  $launchedProcesses = New-Object System.Collections.Generic.List[object]
+  $launchIndex = 0
+
+  foreach ($device in $matchingDevices) {
+    $childFlutterArgs = New-Object System.Collections.Generic.List[string]
+    $childFlutterArgs.Add($argsWithoutAllAlias[0])
+    $childFlutterArgs.Add("--device-id")
+    $childFlutterArgs.Add($device.id)
+
+    if ($argsWithoutAllAlias.Count -gt 1) {
+      for ($index = 1; $index -lt $argsWithoutAllAlias.Count; $index++) {
+        $childFlutterArgs.Add($argsWithoutAllAlias[$index])
+      }
+    }
+
+    $processArgs = @(
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-NoExit",
+      "-File",
+      $scriptPath
+    ) + @($childFlutterArgs)
+
+    $process = Start-Process `
+      -FilePath $powershellExe `
+      -ArgumentList $processArgs `
+      -WorkingDirectory $repoRoot `
+      -WindowStyle Normal `
+      -PassThru
+
+    $launchedProcesses.Add([pscustomobject]@{
+      DeviceName = $device.name
+      DeviceId = $device.id
+      ProcessId = $process.Id
+    })
+
+    $launchIndex++
+    if ($launchIndex -lt $matchingDevices.Count) {
+      Start-Sleep -Seconds 4
+    }
+  }
+
+  Write-Host "Started Flutter sessions:" -ForegroundColor Cyan
+  foreach ($session in $launchedProcesses) {
+    Write-Host "  - $($session.DeviceName) ($($session.DeviceId)) in PowerShell PID $($session.ProcessId)"
+  }
+
+  return $true
+}
+
 if ($FlutterArgs.Count -eq 0) {
   throw "Usage: scripts/flutter_with_env.ps1 <flutter arguments>. Example: scripts/flutter_with_env.ps1 run --device-id android"
 }
@@ -221,13 +527,25 @@ $FlutterArgs = @($FlutterArgs)
 if (
   $FlutterArgs.Count -ge 2 -and
   $FlutterArgs[0] -eq "run" -and
-  $FlutterArgs[1] -in @("android", "ios", "chrome", "windows", "macos", "linux")
+  ($FlutterArgs[1] -in @("android", "ios", "chrome", "windows", "macos", "linux") -or (Test-AndroidAllDeviceAlias $FlutterArgs[1]))
 ) {
   $tailArgs = @()
   if ($FlutterArgs.Count -gt 2) {
     $tailArgs = $FlutterArgs[2..($FlutterArgs.Count - 1)]
   }
   $FlutterArgs = @("run", "--device-id", $FlutterArgs[1]) + $tailArgs
+}
+
+if ($FlutterArgs.Count -gt 0 -and $FlutterArgs[0] -eq "devices") {
+  Repair-AdbAndroidDeviceList
+}
+
+if (Invoke-AndroidAllRun $flutter $FlutterArgs) {
+  exit 0
+}
+
+if ($FlutterArgs.Count -gt 0 -and $FlutterArgs[0] -eq "run") {
+  Repair-AdbAndroidDeviceList
 }
 
 $FlutterArgs = Resolve-DeviceAliasesInArgs $flutter $FlutterArgs

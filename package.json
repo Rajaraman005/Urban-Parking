@@ -5,6 +5,7 @@
   "scripts": {
     "start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/flutter_with_env.ps1 run",
     "android": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/flutter_with_env.ps1 run --device-id android",
+    "android:all": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/flutter_with_env.ps1 run --device-id android:all",
     "android:device": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/flutter_with_env.ps1 run --device-id",
     "devices": "flutter devices",
     "ios": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/flutter_with_env.ps1 run --device-id ios",

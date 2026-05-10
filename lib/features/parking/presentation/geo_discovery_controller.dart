@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/app_providers.dart';
 import '../../../config/geo_discovery_config.dart';
 import '../../../core/utils/geo_discovery/geo_types.dart';
+import '../../../core/utils/location_service.dart';
 import '../../../core/utils/telemetry.dart';
 
 final selectedServiceTypeProvider =
@@ -39,6 +40,7 @@ class GeoDiscoveryViewState {
     required this.result,
     required this.permissionDenied,
     required this.isFallbackLocation,
+    this.locationFailureReason = LocationFailureReason.none,
     this.phase = GeoDiscoveryLoadPhase.loaded,
     this.message,
   });
@@ -47,6 +49,7 @@ class GeoDiscoveryViewState {
   final GeoDiscoveryBatchResult<Map<String, Object?>>? result;
   final bool permissionDenied;
   final bool isFallbackLocation;
+  final LocationFailureReason locationFailureReason;
   final GeoDiscoveryLoadPhase phase;
   final String? message;
 
@@ -64,6 +67,7 @@ class GeoDiscoveryViewState {
     GeoDiscoveryBatchResult<Map<String, Object?>>? result,
     bool? permissionDenied,
     bool? isFallbackLocation,
+    LocationFailureReason? locationFailureReason,
     GeoDiscoveryLoadPhase? phase,
     String? message,
   }) => GeoDiscoveryViewState(
@@ -71,6 +75,7 @@ class GeoDiscoveryViewState {
     result: result ?? this.result,
     permissionDenied: permissionDenied ?? this.permissionDenied,
     isFallbackLocation: isFallbackLocation ?? this.isFallbackLocation,
+    locationFailureReason: locationFailureReason ?? this.locationFailureReason,
     phase: phase ?? this.phase,
     message: message ?? this.message,
   );
@@ -117,12 +122,19 @@ class GeoDiscoveryController extends AsyncNotifier<GeoDiscoveryViewState> {
     final locationState = await ref
         .read(locationServiceProvider)
         .currentLocation();
-    if (locationState.location == null) {
+    if (locationState.location == null || locationState.isFallback) {
+      telemetry.warn(TelemetryEvent.geoSearchBlockedNoLocation, {
+        'isFallback': locationState.isFallback,
+        'permissionDenied': locationState.permissionDenied,
+        'reason': locationState.failureReason.name,
+        'surface': 'search',
+      });
       return GeoDiscoveryViewState(
         center: null,
         result: null,
         permissionDenied: locationState.permissionDenied,
         isFallbackLocation: false,
+        locationFailureReason: locationState.failureReason,
         message: locationState.error,
         phase: GeoDiscoveryLoadPhase.loaded,
       );
@@ -154,6 +166,7 @@ class GeoDiscoveryController extends AsyncNotifier<GeoDiscoveryViewState> {
       result: result,
       permissionDenied: locationState.permissionDenied,
       isFallbackLocation: locationState.isFallback,
+      locationFailureReason: locationState.failureReason,
       message: locationState.error,
       phase: GeoDiscoveryLoadPhase.loaded,
     );

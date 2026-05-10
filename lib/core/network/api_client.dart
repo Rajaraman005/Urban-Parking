@@ -44,6 +44,10 @@ class ApiClient {
   final Dio dio;
   final AccessTokenReader? _accessTokenReader;
 
+  void refreshRuntimeOptions() {
+    dio.options.baseUrl = AppConfig.apiBaseUrl;
+  }
+
   static AppFailure toFailure(Object error) {
     if (error is DioException) {
       final status = error.response?.statusCode;

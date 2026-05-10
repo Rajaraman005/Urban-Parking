@@ -44,10 +44,84 @@ void main() {
     expect(refreshed?.phase, HomeNearbyLoadPhase.loaded);
     expect(refreshed?.items.map((item) => item.id), ['refreshed']);
   });
+
+  test('does not search until a real device location is available', () async {
+    final engine = _BlockingGeoDiscoveryEngine();
+    final locationService = _MutableLocationService(
+      const LocationResult(
+        location: null,
+        permissionDenied: false,
+        isFallback: false,
+        failureReason: LocationFailureReason.servicesDisabled,
+        error: 'Turn on device location to show nearby spaces.',
+      ),
+    );
+    final container = ProviderContainer(
+      overrides: [
+        locationServiceProvider.overrideWithValue(locationService),
+        geoDiscoveryEngineProvider.overrideWithValue(engine),
+        geoDiscoveryCacheProvider.overrideWithValue(GeoDiscoveryCache()),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final blocked = await container.read(homeNearbyControllerProvider.future);
+    expect(blocked.center, isNull);
+    expect(blocked.items, isEmpty);
+    expect(
+      blocked.locationFailureReason,
+      LocationFailureReason.servicesDisabled,
+    );
+    expect(engine.batchCalls, 0);
+
+    locationService.result = const LocationResult(
+      location: GeoPoint(latitude: 13.0827, longitude: 80.2707),
+      permissionDenied: false,
+      isFallback: false,
+    );
+
+    await container.read(homeNearbyControllerProvider.notifier).refresh();
+    final loaded = container.read(homeNearbyControllerProvider).value;
+    expect(loaded?.items.map((item) => item.id), ['initial']);
+    expect(engine.batchCalls, 1);
+  });
+
+  test(
+    'rejects fallback coordinates so Chennai is never queried as GPS',
+    () async {
+      final engine = _BlockingGeoDiscoveryEngine();
+      final container = ProviderContainer(
+        overrides: [
+          locationServiceProvider.overrideWithValue(
+            _MutableLocationService(
+              const LocationResult(
+                location: GeoPoint(latitude: 13.0827, longitude: 80.2707),
+                permissionDenied: false,
+                isFallback: true,
+                failureReason: LocationFailureReason.timeout,
+                error:
+                    'GPS location timed out. Turn on precise location and try again.',
+              ),
+            ),
+          ),
+          geoDiscoveryEngineProvider.overrideWithValue(engine),
+          geoDiscoveryCacheProvider.overrideWithValue(GeoDiscoveryCache()),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final state = await container.read(homeNearbyControllerProvider.future);
+      expect(state.center, isNull);
+      expect(state.items, isEmpty);
+      expect(state.locationFailureReason, LocationFailureReason.timeout);
+      expect(engine.batchCalls, 0);
+    },
+  );
 }
 
 class _BlockingGeoDiscoveryEngine implements GeoDiscoveryEngine {
   Future<GeoDiscoveryBatchResult<Map<String, Object?>>>? nextResult;
+  int batchCalls = 0;
 
   @override
   Future<void> clearCache() async {}
@@ -73,6 +147,7 @@ class _BlockingGeoDiscoveryEngine implements GeoDiscoveryEngine {
     GeoDiscoveryBatchQuery query, {
     CancelToken? cancelToken,
   }) async {
+    batchCalls++;
     final pending = nextResult;
     if (pending != null) {
       nextResult = null;
@@ -91,6 +166,15 @@ class _FakeLocationService extends LocationService {
       isFallback: false,
     );
   }
+}
+
+class _MutableLocationService extends LocationService {
+  _MutableLocationService(this.result);
+
+  LocationResult result;
+
+  @override
+  Future<LocationResult> currentLocation() async => result;
 }
 
 GeoDiscoveryBatchResult<Map<String, Object?>> _result(String id) {

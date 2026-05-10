@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/app_providers.dart';
 import '../../../config/geo_discovery_config.dart';
 import '../../../core/utils/geo_discovery/geo_types.dart';
+import '../../../core/utils/location_service.dart';
 import '../../../core/utils/telemetry.dart';
 
 final homeNearbyControllerProvider =
@@ -21,6 +22,7 @@ class HomeNearbyViewState {
     required this.permissionDenied,
     required this.isFallbackLocation,
     required this.isStale,
+    this.locationFailureReason = LocationFailureReason.none,
     this.phase = HomeNearbyLoadPhase.loaded,
     this.message,
   });
@@ -28,6 +30,7 @@ class HomeNearbyViewState {
   final GeoPoint? center;
   final bool isFallbackLocation;
   final bool isStale;
+  final LocationFailureReason locationFailureReason;
   final List<GeoDiscoveryEntity<Map<String, Object?>>> items;
   final String? message;
   final List<GeoDiscoveryPartialFailure> partialFailures;
@@ -41,6 +44,7 @@ class HomeNearbyViewState {
     GeoPoint? center,
     bool? isFallbackLocation,
     bool? isStale,
+    LocationFailureReason? locationFailureReason,
     List<GeoDiscoveryEntity<Map<String, Object?>>>? items,
     String? message,
     List<GeoDiscoveryPartialFailure>? partialFailures,
@@ -53,6 +57,7 @@ class HomeNearbyViewState {
     permissionDenied: permissionDenied ?? this.permissionDenied,
     isFallbackLocation: isFallbackLocation ?? this.isFallbackLocation,
     isStale: isStale ?? this.isStale,
+    locationFailureReason: locationFailureReason ?? this.locationFailureReason,
     message: message ?? this.message,
     phase: phase ?? this.phase,
   );
@@ -100,7 +105,13 @@ class HomeNearbyController extends AsyncNotifier<HomeNearbyViewState> {
     final locationState = await ref
         .read(locationServiceProvider)
         .currentLocation();
-    if (locationState.location == null) {
+    if (locationState.location == null || locationState.isFallback) {
+      telemetry.warn(TelemetryEvent.geoSearchBlockedNoLocation, {
+        'isFallback': locationState.isFallback,
+        'permissionDenied': locationState.permissionDenied,
+        'reason': locationState.failureReason.name,
+        'surface': 'home',
+      });
       return HomeNearbyViewState(
         center: null,
         items: const [],
@@ -108,6 +119,7 @@ class HomeNearbyController extends AsyncNotifier<HomeNearbyViewState> {
         permissionDenied: locationState.permissionDenied,
         isFallbackLocation: false,
         isStale: false,
+        locationFailureReason: locationState.failureReason,
         message: locationState.error,
         phase: HomeNearbyLoadPhase.loaded,
       );
@@ -152,6 +164,7 @@ class HomeNearbyController extends AsyncNotifier<HomeNearbyViewState> {
       permissionDenied: locationState.permissionDenied,
       isFallbackLocation: locationState.isFallback,
       isStale: pages.any((page) => page.isStale),
+      locationFailureReason: locationState.failureReason,
       message: locationState.error,
       phase: HomeNearbyLoadPhase.loaded,
     );
