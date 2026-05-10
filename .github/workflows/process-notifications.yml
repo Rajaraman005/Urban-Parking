@@ -1,0 +1,40 @@
+name: Process notifications
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  process:
+    name: Call notification worker endpoint
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Process queued notifications
+        env:
+          NOTIFICATION_WORKER_SECRET: ${{ secrets.NOTIFICATION_WORKER_SECRET }}
+          DEFAULT_NOTIFICATION_WORKER_URL: https://lotzi.in/api/internal/notifications/process
+          NOTIFICATION_WORKER_URL: ${{ secrets.NOTIFICATION_WORKER_URL }}
+          REQUEST_ID: github-actions-notifications-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          NOTIFICATION_WORKER_URL="${NOTIFICATION_WORKER_URL:-$DEFAULT_NOTIFICATION_WORKER_URL}"
+
+          if [ -z "${NOTIFICATION_WORKER_SECRET}" ]; then
+            echo "NOTIFICATION_WORKER_SECRET secret is required." >&2
+            exit 1
+          fi
+
+          curl \
+            --silent \
+            --show-error \
+            --fail-with-body \
+            --retry 2 \
+            --retry-delay 5 \
+            --max-time 60 \
+            --request POST \
+            --header "Authorization: Bearer ${NOTIFICATION_WORKER_SECRET}" \
+            --header "X-Request-ID: ${REQUEST_ID}" \
+            --header "X-Worker-ID: github-actions-notification-worker" \
+            "${NOTIFICATION_WORKER_URL}"

@@ -3,10 +3,6 @@
     {
       "path": "/api/internal/jobs/expire-pending-bookings",
       "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/internal/notifications/process",
-      "schedule": "* * * * *"
     }
   ],
   "framework": "nextjs"
