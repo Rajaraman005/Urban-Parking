@@ -12,6 +12,7 @@ import '../features/legal/data/legal_documents.dart';
 import '../features/legal/presentation/legal_document_screen.dart';
 import '../features/messaging/presentation/conversation_list_screen.dart';
 import '../features/messaging/presentation/conversation_thread_screen.dart';
+import '../features/notifications/presentation/notification_center_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/parking/presentation/search_screen.dart';
 import '../features/parking/presentation/owned_parking_screen.dart';
@@ -158,6 +159,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => EditListingPricingScreen(
               spotId: state.pathParameters['spotId']!,
             ),
+          ),
+          GoRoute(
+            path: '/notifications',
+            builder: (context, state) => const NotificationCenterScreen(),
           ),
         ],
       ),

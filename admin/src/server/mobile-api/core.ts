@@ -44,7 +44,7 @@ type MobileApiHandler = (
 
 const corsAllowedHeaders =
   "Content-Type, Authorization, X-Request-ID, X-Retry-Of";
-const corsAllowedMethods = "GET, POST, OPTIONS";
+const corsAllowedMethods = "GET, POST, PATCH, DELETE, OPTIONS";
 const corsExposedHeaders = "X-Request-ID, Retry-After";
 const defaultAllowedOrigins = new Set([
   "https://lotzi.in",

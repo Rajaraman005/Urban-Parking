@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../shared/widgets/app_screen.dart';
 import '../../messaging/presentation/messaging_controller.dart';
+import '../../notifications/presentation/notification_controller.dart';
 import '../data/home_discovery_actions.dart';
 import 'home_nearby_filtering.dart';
 import 'home_nearby_section.dart';
@@ -1075,6 +1076,7 @@ class _HomeTopBar extends ConsumerWidget {
           ),
           orElse: () => 0,
         );
+    final notificationUnreadCount = ref.watch(notificationUnreadCountProvider);
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -1115,12 +1117,92 @@ class _HomeTopBar extends ConsumerWidget {
                   ],
                 ),
               ),
+              _TopBarNotificationButton(
+                unreadCount: notificationUnreadCount,
+                onTap: () => context.push('/notifications'),
+              ),
+              const SizedBox(width: 6),
               _TopBarMessageButton(
                 unreadCount: unreadCount,
                 onTap: () => context.push('/messages'),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TopBarNotificationButton extends StatelessWidget {
+  const _TopBarNotificationButton({
+    required this.onTap,
+    required this.unreadCount,
+  });
+
+  final VoidCallback onTap;
+  final int unreadCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasUnread = unreadCount > 0;
+
+    return Semantics(
+      button: true,
+      label: hasUnread ? '$unreadCount unread notifications' : 'Notifications',
+      child: Tooltip(
+        message: 'Notifications',
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(999),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: onTap,
+                highlightColor: Colors.black.withValues(alpha: 0.04),
+                splashColor: Colors.black.withValues(alpha: 0.06),
+                child: const SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: Icon(
+                    Icons.notifications_none_rounded,
+                    color: Color(0xFF0B0B0C),
+                    size: 25,
+                  ),
+                ),
+              ),
+            ),
+            if (hasUnread)
+              Positioned(
+                right: 1,
+                top: 2,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE11D48),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: Center(
+                      child: Text(
+                        unreadCount > 9 ? '9+' : '$unreadCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 8,
+                          fontWeight: FontWeight.w900,
+                          height: 1,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -1136,57 +1218,75 @@ class _TopBarMessageButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasUnread = unreadCount > 0;
-    return Tooltip(
-      message: 'Messages',
-      child: Semantics(
-        button: true,
-        label: hasUnread ? '$unreadCount unread messages' : 'Messages',
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(999),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: onTap,
-            highlightColor: Colors.black.withValues(alpha: 0.05),
-            splashColor: Colors.black.withValues(alpha: 0.07),
-            child: SizedBox(
-              width: 44,
-              height: 44,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  const Center(
+
+    return Semantics(
+      button: true,
+      label: hasUnread ? '$unreadCount unread messages' : 'Messages',
+      child: Tooltip(
+        message: 'Messages',
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(999),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: onTap,
+                highlightColor: Colors.black.withValues(alpha: 0.04),
+                splashColor: Colors.black.withValues(alpha: 0.06),
+                child: const SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: Center(
                     child: SizedBox(
-                      width: 29,
-                      height: 29,
-                      child: CustomPaint(painter: _ChatBubbleIconPainter()),
-                    ),
-                  ),
-                  if (hasUnread)
-                    Positioned(
-                      right: 7,
-                      top: 7,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE11D48),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                        child: const SizedBox(width: 11, height: 11),
+                      width: 24,
+                      height: 24,
+                      child: CustomPaint(
+                        painter: _PaperPlaneMessageIconPainter(),
                       ),
                     ),
-                ],
+                  ),
+                ),
               ),
             ),
-          ),
+            if (hasUnread)
+              Positioned(
+                right: 0,
+                top: 1,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE11D48),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: Center(
+                      child: Text(
+                        unreadCount > 9 ? '9+' : '$unreadCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 8,
+                          fontWeight: FontWeight.w900,
+                          height: 1,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _ChatBubbleIconPainter extends CustomPainter {
-  const _ChatBubbleIconPainter();
+class _PaperPlaneMessageIconPainter extends CustomPainter {
+  const _PaperPlaneMessageIconPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1196,67 +1296,23 @@ class _ChatBubbleIconPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
-      ..strokeWidth = size.width * 0.078;
+      ..strokeWidth = (size.shortestSide * 0.068).clamp(1.7, 1.9);
 
-    final backBubble = Path()
-      ..moveTo(size.width * 0.36, size.height * 0.16)
-      ..lineTo(size.width * 0.74, size.height * 0.16)
-      ..quadraticBezierTo(
-        size.width * 0.91,
-        size.height * 0.16,
-        size.width * 0.91,
-        size.height * 0.33,
-      )
-      ..lineTo(size.width * 0.91, size.height * 0.58);
+    Offset point(double x, double y) => Offset(size.width * x, size.height * y);
 
-    final frontBubble = Path()
-      ..moveTo(size.width * 0.15, size.height * 0.77)
-      ..lineTo(size.width * 0.15, size.height * 0.48)
-      ..quadraticBezierTo(
-        size.width * 0.15,
-        size.height * 0.34,
-        size.width * 0.29,
-        size.height * 0.34,
-      )
-      ..lineTo(size.width * 0.70, size.height * 0.34)
-      ..quadraticBezierTo(
-        size.width * 0.84,
-        size.height * 0.34,
-        size.width * 0.84,
-        size.height * 0.48,
-      )
-      ..lineTo(size.width * 0.84, size.height * 0.67)
-      ..quadraticBezierTo(
-        size.width * 0.84,
-        size.height * 0.81,
-        size.width * 0.70,
-        size.height * 0.81,
-      )
-      ..lineTo(size.width * 0.36, size.height * 0.81)
-      ..lineTo(size.width * 0.18, size.height * 0.92)
-      ..quadraticBezierTo(
-        size.width * 0.15,
-        size.height * 0.94,
-        size.width * 0.15,
-        size.height * 0.89,
-      )
-      ..lineTo(size.width * 0.15, size.height * 0.77);
+    final body = Path()
+      ..moveTo(point(0.10, 0.45).dx, point(0.10, 0.45).dy)
+      ..lineTo(point(0.86, 0.16).dx, point(0.86, 0.16).dy)
+      ..lineTo(point(0.58, 0.88).dx, point(0.58, 0.88).dy)
+      ..lineTo(point(0.41, 0.58).dx, point(0.41, 0.58).dy)
+      ..close();
 
-    canvas.drawPath(backBubble, stroke);
-    canvas.drawPath(frontBubble, stroke);
+    final fold = Path()
+      ..moveTo(point(0.41, 0.58).dx, point(0.41, 0.58).dy)
+      ..lineTo(point(0.86, 0.16).dx, point(0.86, 0.16).dy);
 
-    final dotPaint = Paint()
-      ..isAntiAlias = true
-      ..color = const Color(0xFF0B0B0C)
-      ..style = PaintingStyle.fill;
-    final dotRadius = size.width * 0.041;
-    for (final x in const [0.41, 0.52, 0.63]) {
-      canvas.drawCircle(
-        Offset(size.width * x, size.height * 0.59),
-        dotRadius,
-        dotPaint,
-      );
-    }
+    canvas.drawPath(body, stroke);
+    canvas.drawPath(fold, stroke);
   }
 
   @override

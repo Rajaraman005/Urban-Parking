@@ -1,7 +1,7 @@
 import {
   handleListNotifications,
-  handleMarkNotificationRead,
-} from "@/server/mobile-api/messaging";
+  handleMarkNotificationsRead,
+} from "@/server/mobile-api/notifications";
 import { withMobileApi } from "@/server/mobile-api/core";
 
 export const runtime = "nodejs";
@@ -21,7 +21,7 @@ export const POST = withMobileApi(
     rateLimit: { bucket: "notification-read", limit: 120, windowSeconds: 60 },
     route: "/api/v1/notifications",
   },
-  handleMarkNotificationRead,
+  handleMarkNotificationsRead,
 );
 
 export const OPTIONS = withMobileApi(

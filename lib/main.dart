@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -10,6 +11,8 @@ import 'config/preview_flags.dart';
 import 'features/parking/presentation/owned_parking_live_sync.dart';
 import 'features/profile/presentation/profile_live_sync.dart';
 import 'features/messaging/presentation/messaging_realtime.dart';
+import 'features/notifications/presentation/notification_device_registration.dart';
+import 'features/notifications/presentation/notification_realtime.dart';
 import 'core/utils/app_logger.dart';
 import 'core/utils/telemetry.dart';
 import 'shared/widgets/app_loader.dart';
@@ -21,6 +24,15 @@ Future<void> main() async {
 
   await Hive.initFlutter();
   await Hive.openBox<String>(AppConfig.geoCacheBoxName);
+
+  try {
+    await Firebase.initializeApp();
+    appLogger.info('firebase_initialized');
+  } catch (error) {
+    appLogger.warn('firebase_initialization_failed', {
+      'error': error.toString(),
+    });
+  }
 
   appLogger.info('runtime_config_loaded', {
     'appEnv': AppConfig.appEnv,
@@ -74,6 +86,8 @@ class LotziApp extends ConsumerWidget {
     ref.watch(ownedParkingLiveSyncProvider);
     ref.watch(profileLiveSyncProvider);
     ref.watch(messagingInboxLiveSyncProvider);
+    ref.watch(notificationDeviceRegistrationProvider);
+    ref.watch(notificationLiveSyncProvider);
     ref.watch(locationWarmupProvider);
 
     return MaterialApp.router(
