@@ -79,7 +79,9 @@ export async function handleStartConversation(context: MobileApiContext) {
   context.log.actor_id_hash = sha256Hex(userId);
   await enforceUserRateLimit(context, userId, "conversation-start", 30, 60);
 
-  const body = startConversationSchema.parse(await readJsonBody(context.request));
+  const body = startConversationSchema.parse(
+    await readJsonBody(context.request),
+  );
   context.log.listing_id = body.propertyId;
   const result = await timedUserSupabase(context, (client) =>
     withAbortSignal(
@@ -92,7 +94,10 @@ export async function handleStartConversation(context: MobileApiContext) {
 
   if (result.error) throw messagingSupabaseError(result.error);
   context.log.conversation_id = stringField(result.data, "id");
-  return jsonResponse(result.data, { requestId: context.requestId, status: 200 });
+  return jsonResponse(result.data, {
+    requestId: context.requestId,
+    status: 200,
+  });
 }
 
 export async function handleListConversations(context: MobileApiContext) {
@@ -130,7 +135,9 @@ export async function handleListMessages(
 ) {
   const userId = await requireUserId(context);
   context.log.actor_id_hash = sha256Hex(userId);
-  const conversationId = uuidSchema.parse((await paramsFromRouteContext(routeContext)).id);
+  const conversationId = uuidSchema.parse(
+    (await paramsFromRouteContext(routeContext)).id,
+  );
   context.log.conversation_id = conversationId;
 
   const url = new URL(context.request.url);
@@ -163,7 +170,9 @@ export async function handleSendMessage(
   context.log.actor_id_hash = sha256Hex(userId);
   await enforceUserRateLimit(context, userId, "message-send", 120, 60);
 
-  const conversationId = uuidSchema.parse((await paramsFromRouteContext(routeContext)).id);
+  const conversationId = uuidSchema.parse(
+    (await paramsFromRouteContext(routeContext)).id,
+  );
   context.log.conversation_id = conversationId;
   const body = sendMessageSchema.parse(await readJsonBody(context.request));
   if (body.messageType === "text" && !body.body?.trim()) {
@@ -186,7 +195,10 @@ export async function handleSendMessage(
 
   if (result.error) throw messagingSupabaseError(result.error);
   context.log.message_id = stringField(result.data, "id");
-  return jsonResponse(result.data, { requestId: context.requestId, status: 201 });
+  return jsonResponse(result.data, {
+    requestId: context.requestId,
+    status: 201,
+  });
 }
 
 export async function handleMarkConversationRead(
@@ -195,7 +207,9 @@ export async function handleMarkConversationRead(
 ) {
   const userId = await requireUserId(context);
   context.log.actor_id_hash = sha256Hex(userId);
-  const conversationId = uuidSchema.parse((await paramsFromRouteContext(routeContext)).id);
+  const conversationId = uuidSchema.parse(
+    (await paramsFromRouteContext(routeContext)).id,
+  );
   context.log.conversation_id = conversationId;
   const body = markReadSchema.parse(await readJsonBody(context.request));
 
@@ -210,7 +224,10 @@ export async function handleMarkConversationRead(
   );
 
   if (result.error) throw messagingSupabaseError(result.error);
-  return jsonResponse(result.data, { requestId: context.requestId, status: 200 });
+  return jsonResponse(result.data, {
+    requestId: context.requestId,
+    status: 200,
+  });
 }
 
 export async function handleCreateAttachmentSlot(context: MobileApiContext) {
@@ -237,7 +254,10 @@ export async function handleCreateAttachmentSlot(context: MobileApiContext) {
   );
 
   if (result.error) throw messagingSupabaseError(result.error);
-  return jsonResponse(result.data, { requestId: context.requestId, status: 201 });
+  return jsonResponse(result.data, {
+    requestId: context.requestId,
+    status: 201,
+  });
 }
 
 export async function handleCompleteAttachmentUpload(
@@ -246,7 +266,9 @@ export async function handleCompleteAttachmentUpload(
 ) {
   const userId = await requireUserId(context);
   context.log.actor_id_hash = sha256Hex(userId);
-  const attachmentId = uuidSchema.parse((await paramsFromRouteContext(routeContext)).id);
+  const attachmentId = uuidSchema.parse(
+    (await paramsFromRouteContext(routeContext)).id,
+  );
 
   const result = await timedUserSupabase(context, (client) =>
     withAbortSignal(
@@ -258,7 +280,10 @@ export async function handleCompleteAttachmentUpload(
   );
 
   if (result.error) throw messagingSupabaseError(result.error);
-  return jsonResponse(result.data, { requestId: context.requestId, status: 200 });
+  return jsonResponse(result.data, {
+    requestId: context.requestId,
+    status: 200,
+  });
 }
 
 export async function handleBlockUser(context: MobileApiContext) {
@@ -278,7 +303,10 @@ export async function handleBlockUser(context: MobileApiContext) {
   );
 
   if (result.error) throw messagingSupabaseError(result.error);
-  return jsonResponse(result.data, { requestId: context.requestId, status: 201 });
+  return jsonResponse(result.data, {
+    requestId: context.requestId,
+    status: 201,
+  });
 }
 
 export async function handleReportMessage(context: MobileApiContext) {
@@ -302,7 +330,10 @@ export async function handleReportMessage(context: MobileApiContext) {
   );
 
   if (result.error) throw messagingSupabaseError(result.error);
-  return jsonResponse(result.data, { requestId: context.requestId, status: 201 });
+  return jsonResponse(result.data, {
+    requestId: context.requestId,
+    status: 201,
+  });
 }
 
 export async function handleListNotifications(context: MobileApiContext) {
@@ -332,7 +363,9 @@ export async function handleListNotifications(context: MobileApiContext) {
 export async function handleMarkNotificationRead(context: MobileApiContext) {
   const userId = await requireUserId(context);
   context.log.actor_id_hash = sha256Hex(userId);
-  const body = notificationReadSchema.parse(await readJsonBody(context.request));
+  const body = notificationReadSchema.parse(
+    await readJsonBody(context.request),
+  );
 
   const result = await timedUserSupabase(context, (client) => {
     const query = client
@@ -340,13 +373,18 @@ export async function handleMarkNotificationRead(context: MobileApiContext) {
       .update({ read_at: new Date().toISOString(), status: "read" })
       .eq("recipient_id", userId);
     return withAbortSignal(
-      body.notificationId ? query.eq("id", body.notificationId) : query.eq("status", "unread"),
+      body.notificationId
+        ? query.eq("id", body.notificationId)
+        : query.eq("status", "unread"),
       context.signal,
     );
   });
 
   if (result.error) throw messagingSupabaseError(result.error);
-  return jsonResponse({ ok: true }, { requestId: context.requestId, status: 200 });
+  return jsonResponse(
+    { ok: true },
+    { requestId: context.requestId, status: 200 },
+  );
 }
 
 async function requireUserId(context: MobileApiContext) {
@@ -437,6 +475,18 @@ function messagingSupabaseError(error: SupabaseErrorLike) {
   }
   if (code === "23514") {
     return apiError(422, "MESSAGING_VALIDATION_FAILED", message);
+  }
+  if (
+    code === "42883" ||
+    code === "42P01" ||
+    (lowerMessage.includes("function") &&
+      lowerMessage.includes("does not exist"))
+  ) {
+    return apiError(
+      503,
+      "DEPLOYMENT_MISCONFIGURATION",
+      "Messaging database migration is not installed yet.",
+    );
   }
   if (code === "57014") {
     return apiError(

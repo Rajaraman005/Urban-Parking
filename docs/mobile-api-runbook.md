@@ -51,6 +51,21 @@ curl.exe -i --max-time 20 https://lotzi.in/api/v1/bookings/quote `
 
 The quote smoke test should return a JSON validation error, not HTML.
 
+For authenticated messaging routes, production also needs the public Supabase
+anon key in the admin/Vercel environment. The admin API accepts either the
+server names (`SUPABASE_URL`, `SUPABASE_ANON_KEY`) or the existing mobile names
+(`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`):
+
+```powershell
+curl.exe -i --max-time 20 https://lotzi.in/api/v1/conversations `
+  -H "Authorization: Bearer <valid-user-access-token>" `
+  -H "X-Request-ID: smoke-messages-001"
+```
+
+Missing Supabase auth env should return JSON with
+`code: deployment_misconfiguration` so the app can use its direct Supabase RPC
+fallback instead of showing a generic internal error.
+
 ## Alerts
 
 Configure the Vercel log drain destination with:

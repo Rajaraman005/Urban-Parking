@@ -9,14 +9,12 @@ vi.mock("./supabase", () => ({
 }));
 
 import {
+  handleListConversations,
   handleMarkConversationRead,
   handleSendMessage,
   handleStartConversation,
 } from "./messaging";
-import {
-  currentUserIdFromBearer,
-  timedUserSupabase,
-} from "./supabase";
+import { currentUserIdFromBearer, timedUserSupabase } from "./supabase";
 import type { MobileApiContext } from "./core";
 
 describe("messaging mobile api", () => {
@@ -32,8 +30,8 @@ describe("messaging mobile api", () => {
       error: null,
     }));
     vi.mocked(currentUserIdFromBearer).mockResolvedValue("user-1");
-    vi.mocked(timedUserSupabase).mockImplementation(async (_context, callback) =>
-      callback({ rpc } as never),
+    vi.mocked(timedUserSupabase).mockImplementation(
+      async (_context, callback) => callback({ rpc } as never),
     );
 
     const response = await handleStartConversation(
@@ -54,15 +52,18 @@ describe("messaging mobile api", () => {
       error: null,
     }));
     vi.mocked(currentUserIdFromBearer).mockResolvedValue("user-1");
-    vi.mocked(timedUserSupabase).mockImplementation(async (_context, callback) =>
-      callback({ rpc } as never),
+    vi.mocked(timedUserSupabase).mockImplementation(
+      async (_context, callback) => callback({ rpc } as never),
     );
 
     const response = await handleSendMessage(
-      contextWithBody("/api/v1/conversations/33333333-3333-4333-8333-333333333333/messages", {
-        body: "Hello host",
-        clientMessageId: "11111111-1111-4111-8111-111111111111",
-      }),
+      contextWithBody(
+        "/api/v1/conversations/33333333-3333-4333-8333-333333333333/messages",
+        {
+          body: "Hello host",
+          clientMessageId: "11111111-1111-4111-8111-111111111111",
+        },
+      ),
       {
         params: {
           id: "33333333-3333-4333-8333-333333333333",
@@ -87,14 +88,17 @@ describe("messaging mobile api", () => {
       error: null,
     }));
     vi.mocked(currentUserIdFromBearer).mockResolvedValue("user-1");
-    vi.mocked(timedUserSupabase).mockImplementation(async (_context, callback) =>
-      callback({ rpc } as never),
+    vi.mocked(timedUserSupabase).mockImplementation(
+      async (_context, callback) => callback({ rpc } as never),
     );
 
     const response = await handleMarkConversationRead(
-      contextWithBody("/api/v1/conversations/33333333-3333-4333-8333-333333333333/read", {
-        lastSeenMessageSeq: 42,
-      }),
+      contextWithBody(
+        "/api/v1/conversations/33333333-3333-4333-8333-333333333333/read",
+        {
+          lastSeenMessageSeq: 42,
+        },
+      ),
       {
         params: {
           id: "33333333-3333-4333-8333-333333333333",
@@ -108,6 +112,27 @@ describe("messaging mobile api", () => {
       p_last_seen_message_seq: 42,
     });
   });
+
+  it("reports missing messaging RPCs as deployment misconfiguration", async () => {
+    const rpc = vi.fn(() => ({
+      data: null,
+      error: {
+        code: "42883",
+        message: "function public.list_conversations does not exist",
+      },
+    }));
+    vi.mocked(currentUserIdFromBearer).mockResolvedValue("user-1");
+    vi.mocked(timedUserSupabase).mockImplementation(
+      async (_context, callback) => callback({ rpc } as never),
+    );
+
+    await expect(
+      handleListConversations(contextWithGet("/api/v1/conversations")),
+    ).rejects.toMatchObject({
+      code: "DEPLOYMENT_MISCONFIGURATION",
+      status: 503,
+    });
+  });
 });
 
 function contextWithBody(path: string, body: unknown): MobileApiContext {
@@ -119,6 +144,19 @@ function contextWithBody(path: string, body: unknown): MobileApiContext {
       body: JSON.stringify(body),
       headers: { "Content-Type": "application/json" },
       method: "POST",
+    }),
+    requestId: "request-1",
+    signal: abortController.signal,
+  };
+}
+
+function contextWithGet(path: string): MobileApiContext {
+  const abortController = new AbortController();
+  return {
+    addSupabaseQueryMs: vi.fn(),
+    log: {},
+    request: new Request(`https://lotzi.in${path}`, {
+      method: "GET",
     }),
     requestId: "request-1",
     signal: abortController.signal,

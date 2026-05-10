@@ -53,7 +53,9 @@ class ApiClient {
       final status = error.response?.statusCode;
       final data = error.response?.data;
       final details = data is Map<String, Object?> ? data : const {};
-      final code = details['code']?.toString();
+      final code =
+          details['code']?.toString().toLowerCase() ??
+          details['error_code']?.toString().toLowerCase();
       final message =
           details['message']?.toString() ?? error.message ?? 'Network error';
       final retryAfter = _retryAfterFor(error.response);
@@ -64,6 +66,10 @@ class ApiClient {
           code: 'deployment_misconfiguration',
           retryable: false,
         );
+      }
+
+      if (code == 'deployment_misconfiguration') {
+        return ConfigurationFailure(message, code: code, retryable: false);
       }
 
       if (error.type == DioExceptionType.connectionTimeout ||

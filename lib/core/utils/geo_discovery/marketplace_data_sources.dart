@@ -33,6 +33,15 @@ class RestMarketplaceDataSource implements MarketplaceDataSource {
         (json) => Map<String, Object?>.from(json as Map),
       );
     } on DioException catch (error) {
+      if (error.type == DioExceptionType.cancel ||
+          cancelToken?.isCancelled == true) {
+        throw const GeoDiscoveryError(
+          'Geo discovery request was cancelled.',
+          code: GeoFailureCode.aborted,
+          retryable: false,
+        );
+      }
+
       final failure = ApiClient.toFailure(error);
       telemetry.warn(TelemetryEvent.geoSearchFailed, {
         'apiHost': AppConfig.apiBaseHost,

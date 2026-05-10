@@ -124,6 +124,42 @@ void main() {
     },
   );
 
+  test('engine does not cooldown cancelled refreshes', () async {
+    final repository = _SwitchingGeoRepository([
+      const GeoDiscoveryError(
+        'Geo discovery request was cancelled.',
+        code: GeoFailureCode.aborted,
+        retryable: false,
+      ),
+      null,
+    ]);
+    final engine = GeoDiscoveryEngine(
+      repository: repository,
+      cache: GeoDiscoveryCache(),
+    );
+    const query = GeoDiscoveryBatchQuery(
+      latitude: 13.0827,
+      longitude: 80.2707,
+      serviceTypes: [ServiceType.parking],
+    );
+
+    await expectLater(
+      engine.getNearbyBatch(query),
+      throwsA(
+        isA<GeoDiscoveryError>().having(
+          (error) => error.code,
+          'code',
+          GeoFailureCode.aborted,
+        ),
+      ),
+    );
+
+    final recovered = await engine.getNearbyBatch(query);
+
+    expect(recovered.results[ServiceType.parking]!.items, hasLength(1));
+    expect(repository.calls, 2);
+  });
+
   test('geo discovery errors stringify to user-facing messages', () {
     const error = GeoDiscoveryError(
       'Nearby discovery is temporarily unavailable.',
@@ -188,5 +224,25 @@ class _FailingGeoRepository implements GeoDiscoveryRepository {
   }) async {
     calls += 1;
     throw error;
+  }
+}
+
+class _SwitchingGeoRepository extends _FakeGeoRepository {
+  _SwitchingGeoRepository(this.errors);
+
+  final List<GeoDiscoveryError?> errors;
+
+  @override
+  Future<GeoDiscoveryBatchResult<Map<String, Object?>>> searchNearby(
+    GeoDiscoveryNormalizedQuery query, {
+    CancelToken? cancelToken,
+  }) async {
+    final index = calls;
+    final error = index < errors.length ? errors[index] : null;
+    if (error != null) {
+      calls += 1;
+      throw error;
+    }
+    return super.searchNearby(query, cancelToken: cancelToken);
   }
 }

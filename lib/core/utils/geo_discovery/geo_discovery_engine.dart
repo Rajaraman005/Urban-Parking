@@ -131,6 +131,14 @@ class GeoDiscoveryEngine {
       return result;
     } catch (error) {
       final geoError = toGeoDiscoveryError(error);
+      if (geoError.code == GeoFailureCode.aborted) {
+        final fallback = cached.value ?? _lastSuccessfulByKey[key];
+        if (fallback != null) {
+          return _markBatch(fallback, isStale: true);
+        }
+        throw geoError;
+      }
+
       if (geoError.code == GeoFailureCode.invalidCursor) {
         telemetry.warn(TelemetryEvent.geoCursorInvalidated, {
           'code': geoError.code.apiValue,

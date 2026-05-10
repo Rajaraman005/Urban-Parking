@@ -45,4 +45,25 @@ void main() {
     expect((failure as NetworkFailure).retryAfter, const Duration(seconds: 7));
     expect(failure.retryable, isTrue);
   });
+
+  test('classifies JSON deployment misconfiguration responses', () {
+    final failure = ApiClient.toFailure(
+      DioException(
+        requestOptions: RequestOptions(path: '/conversations'),
+        response: Response<Map<String, Object?>>(
+          data: const {
+            'code': 'deployment_misconfiguration',
+            'message': 'Mobile API authentication is not configured.',
+          },
+          requestOptions: RequestOptions(path: '/conversations'),
+          statusCode: 503,
+        ),
+        type: DioExceptionType.badResponse,
+      ),
+    );
+
+    expect(failure, isA<ConfigurationFailure>());
+    expect(failure.code, 'deployment_misconfiguration');
+    expect(failure.retryable, isFalse);
+  });
 }
