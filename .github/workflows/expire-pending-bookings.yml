@@ -1,44 +1,44 @@
-name: Expire pending bookings
+# name: Expire pending bookings
 
-on:
-  schedule:
-    - cron: "*/5 * * * *"
-  workflow_dispatch:
+# on:
+#   schedule:
+#     - cron: "*/5 * * * *"
+#   workflow_dispatch:
 
-jobs:
-  expire:
-    name: Call booking expiry job
-    runs-on: ubuntu-latest
-    timeout-minutes: 3
-    steps:
-      - name: Call secured expiry endpoint
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          DEFAULT_EXPIRY_JOB_URL: https://lotzi.in/api/internal/jobs/expire-pending-bookings
-          EXPIRY_JOB_URL: ${{ secrets.BOOKING_EXPIRY_JOB_URL }}
-          REQUEST_ID: github-actions-${{ github.run_id }}-${{ github.run_attempt }}
-        run: |
-          set -euo pipefail
-          EXPIRY_JOB_URL="${EXPIRY_JOB_URL:-$DEFAULT_EXPIRY_JOB_URL}"
+# jobs:
+#   expire:
+#     name: Call booking expiry job
+#     runs-on: ubuntu-latest
+#     timeout-minutes: 3
+#     steps:
+#       - name: Call secured expiry endpoint
+#         env:
+#           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+#           DEFAULT_EXPIRY_JOB_URL: https://lotzi.in/api/internal/jobs/expire-pending-bookings
+#           EXPIRY_JOB_URL: ${{ secrets.BOOKING_EXPIRY_JOB_URL }}
+#           REQUEST_ID: github-actions-${{ github.run_id }}-${{ github.run_attempt }}
+#         run: |
+#           set -euo pipefail
+#           EXPIRY_JOB_URL="${EXPIRY_JOB_URL:-$DEFAULT_EXPIRY_JOB_URL}"
 
-          if [ -z "${EXPIRY_JOB_URL}" ]; then
-            echo "Expiry job URL is required." >&2
-            exit 1
-          fi
+#           if [ -z "${EXPIRY_JOB_URL}" ]; then
+#             echo "Expiry job URL is required." >&2
+#             exit 1
+#           fi
 
-          if [ -z "${CRON_SECRET}" ]; then
-            echo "CRON_SECRET secret is required." >&2
-            exit 1
-          fi
+#           if [ -z "${CRON_SECRET}" ]; then
+#             echo "CRON_SECRET secret is required." >&2
+#             exit 1
+#           fi
 
-          curl \
-            --silent \
-            --show-error \
-            --fail-with-body \
-            --retry 2 \
-            --retry-delay 5 \
-            --max-time 60 \
-            --request POST \
-            --header "Authorization: Bearer ${CRON_SECRET}" \
-            --header "X-Request-ID: ${REQUEST_ID}" \
-            "${EXPIRY_JOB_URL}"
+#           curl \
+#             --silent \
+#             --show-error \
+#             --fail-with-body \
+#             --retry 2 \
+#             --retry-delay 5 \
+#             --max-time 60 \
+#             --request POST \
+#             --header "Authorization: Bearer ${CRON_SECRET}" \
+#             --header "X-Request-ID: ${REQUEST_ID}" \
+#             "${EXPIRY_JOB_URL}"
